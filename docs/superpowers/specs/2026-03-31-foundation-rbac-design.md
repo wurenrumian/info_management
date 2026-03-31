@@ -83,11 +83,13 @@
 - `grade` varchar(10)
 - `major` varchar(100)
 - `extra_attrs` jsonb
+- `profile_attrs` jsonb
 - `created_at` timestamp
 - `updated_at` timestamp
 
 说明：
 - `extra_attrs` 用于承载休学/复学/特殊身份等变化字段，避免频繁改表。
+- `profile_attrs` 用于存储个性化信息（兴趣标签、个人偏好、展示性资料等），与管理口径字段解耦。
 
 ### 6.2 classes
 
@@ -122,7 +124,7 @@
 管理接口：
 - `GET /api/v1/admin/users`：分页查询用户（姓名/学号/年级/班级过滤）
 - `GET /api/v1/admin/users/:id`：查看用户详情
-- `PATCH /api/v1/admin/users/:id`：更新用户信息（含 `extra_attrs`）
+- `PATCH /api/v1/admin/users/:id`：更新用户信息（含 `extra_attrs`、`profile_attrs`）
 - `GET /api/v1/admin/classes`：分页查询班级
 - `GET /api/v1/admin/classes/:id`：查看班级详情
 - `POST /api/v1/admin/classes`：创建班级（超管）
@@ -154,3 +156,4 @@
 - `ScopeFilter(actor)` 作为数据边界网关
 
 由此保证并行开发时不重复定义身份体系，也不互相覆盖权限逻辑。
+
