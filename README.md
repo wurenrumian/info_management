@@ -1,6 +1,6 @@
 # Manage Backend
 
-第一阶段（Foundation RBAC）已完成，当前实现了用户/班级基础模型、四级权限、数据范围控制和基础管理接口。
+第二阶段（Knowledge Base）已完成，当前除 Foundation RBAC 外，已支持知识库检索与管理接口。
 
 ## Phase 1 Delivered
 
@@ -44,6 +44,38 @@ go test ./... -count=1
 ## API Documentation
 
 - `docs/api/phase1-foundation-api.md`
+- `docs/api/phase2-knowledge-api.md`
+
+## Knowledge Base Demo (Phase 2)
+
+```bash
+# 1) 启动服务（需先设置 DATABASE_DSN）
+go run ./cmd/server
+
+# 2) 生成联调附件
+./scripts/dev/make_demo_knowledge_files.sh /tmp
+
+# 3) 调用导入/检索/管理接口
+./scripts/dev/knowledge_api_curl.sh
+```
+
+## Kingbase Local Test (Docker)
+
+```bash
+# 1) 启动本地金仓容器（个人脚本）
+./scripts/dev/kingbase_docker_up.sh
+
+# 2) 设置连接串
+export DATABASE_DSN='host=127.0.0.1 port=54321 user=system password=123456 dbname=test sslmode=disable'
+
+# 3) 启动服务并执行接口联调
+go run ./cmd/server
+./scripts/dev/make_demo_knowledge_files.sh /tmp
+./scripts/dev/knowledge_api_curl.sh
+
+# 4) 跑知识库金仓集成测试
+./scripts/dev/knowledge_repo_kingbase_integration.sh
+```
 
 ## Team Workflow (Superpowers Optional)
 

@@ -15,10 +15,14 @@ func TestAuthorizeMatrix(t *testing.T) {
 		allow  bool
 	}{
 		{model.RoleStudent, authz.ActionGetMe, true},
+		{model.RoleStudent, authz.ActionKnowledgeSearch, true},
+		{model.RoleStudent, authz.ActionKnowledgeList, false},
 		{model.RoleStudent, authz.ActionUsersList, false},
 		{model.RoleCadre, authz.ActionUsersList, true},
+		{model.RoleCadre, authz.ActionKnowledgeCreate, true},
 		{model.RoleCadre, authz.ActionUsersPatch, false},
 		{model.RoleTeacher, authz.ActionClassesGet, true},
+		{model.RoleTeacher, authz.ActionKnowledgePatch, true},
 		{model.RoleTeacher, authz.ActionClassesCreate, false},
 		{model.RoleSuperAdmin, authz.ActionAdminLogsList, true},
 		{999, authz.ActionGetMe, false},

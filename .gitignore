@@ -33,3 +33,12 @@ build/
 coverage/
 node_modules/
 .worktrees/
+
+# secrect files
+# 证书文件
+*.dat 
+
+# personal
+
+.codex
+data/

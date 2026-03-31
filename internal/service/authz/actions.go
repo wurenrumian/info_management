@@ -1,14 +1,19 @@
 package authz
 
 const (
-	ActionGetMe         = "me:get"
-	ActionUsersList     = "users:list"
-	ActionUsersGet      = "users:get"
-	ActionUsersPatch    = "users:patch"
-	ActionClassesList   = "classes:list"
-	ActionClassesGet    = "classes:get"
-	ActionClassesCreate = "classes:create"
-	ActionClassesPatch  = "classes:patch"
-	ActionAdminLogsList = "admin_logs:list"
+	ActionGetMe           = "me:get"
+	ActionKnowledgeSearch = "knowledge:search"
+	ActionKnowledgeList   = "knowledge:list"
+	ActionKnowledgeGet    = "knowledge:get"
+	ActionKnowledgeCreate = "knowledge:create"
+	ActionKnowledgePatch  = "knowledge:patch"
+	ActionKnowledgeDelete = "knowledge:delete"
+	ActionUsersList       = "users:list"
+	ActionUsersGet        = "users:get"
+	ActionUsersPatch      = "users:patch"
+	ActionClassesList     = "classes:list"
+	ActionClassesGet      = "classes:get"
+	ActionClassesCreate   = "classes:create"
+	ActionClassesPatch    = "classes:patch"
+	ActionAdminLogsList   = "admin_logs:list"
 )
-
