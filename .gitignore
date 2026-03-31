@@ -33,3 +33,7 @@ build/
 coverage/
 node_modules/
 .worktrees/
+
+# personal
+
+.codex
