@@ -46,9 +46,11 @@ func New(db *gorm.DB) *gin.Engine {
 
 	admin.GET("/logs", adminLogHandler.ListLogs)
 	admin.GET("/knowledge", adminKnowledgeHandler.ListKnowledge)
+	admin.GET("/knowledge/:id", adminKnowledgeHandler.GetKnowledge)
 	admin.POST("/knowledge", adminKnowledgeHandler.CreateKnowledge)
 	admin.POST("/knowledge/import", adminKnowledgeHandler.ImportKnowledge)
 	admin.PATCH("/knowledge/:id", adminKnowledgeHandler.PatchKnowledge)
+	admin.DELETE("/knowledge/:id", adminKnowledgeHandler.DeleteKnowledge)
 
 	return r
 }

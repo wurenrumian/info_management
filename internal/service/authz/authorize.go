@@ -11,8 +11,10 @@ func Authorize(role int, action string) bool {
 			action == ActionUsersGet ||
 			action == ActionKnowledgeSearch ||
 			action == ActionKnowledgeList ||
+			action == ActionKnowledgeGet ||
 			action == ActionKnowledgeCreate ||
 			action == ActionKnowledgePatch ||
+			action == ActionKnowledgeDelete ||
 			action == ActionClassesList ||
 			action == ActionClassesGet
 	case model.RoleTeacher:
@@ -20,8 +22,10 @@ func Authorize(role int, action string) bool {
 			action == ActionUsersGet ||
 			action == ActionKnowledgeSearch ||
 			action == ActionKnowledgeList ||
+			action == ActionKnowledgeGet ||
 			action == ActionKnowledgeCreate ||
 			action == ActionKnowledgePatch ||
+			action == ActionKnowledgeDelete ||
 			action == ActionClassesList ||
 			action == ActionClassesGet
 	case model.RoleSuperAdmin:

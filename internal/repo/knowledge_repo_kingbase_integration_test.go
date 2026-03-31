@@ -49,6 +49,13 @@ func TestKnowledgeRepoSearchWithKingbase(t *testing.T) {
 		CreatedBy: 1,
 		UpdatedBy: 1,
 	}))
+	require.NoError(t, r.Create(&model.KnowledgeItem{
+		Question:  "奖学金申请材料有哪些",
+		Answer:    "提交综测排名证明、成绩单和个人陈述",
+		Keywords:  datatypes.JSON(`["奖学金","申请","材料"]`),
+		CreatedBy: 1,
+		UpdatedBy: 1,
+	}))
 
 	hits, err := r.Search("休学 申请", 20, 0)
 	require.NoError(t, err)
@@ -58,4 +65,8 @@ func TestKnowledgeRepoSearchWithKingbase(t *testing.T) {
 	miss, err := r.Search("完全不存在的关键词", 20, 0)
 	require.NoError(t, err)
 	require.Empty(t, miss)
+
+	cnPhraseHits, err := r.Search("奖学金申请", 20, 0)
+	require.NoError(t, err)
+	require.NotEmpty(t, cnPhraseHits)
 }

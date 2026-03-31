@@ -15,6 +15,34 @@ STUDENT_GRADE="${STUDENT_GRADE:-2023}"
 DOCX_FILE="${DOCX_FILE:-/tmp/knowledge_demo.docx}"
 XLSX_FILE="${XLSX_FILE:-/tmp/knowledge_demo.xlsx}"
 
+assert_contains() {
+  local haystack="$1"
+  local needle="$2"
+  local label="$3"
+  if [[ "$haystack" != *"$needle"* ]]; then
+    echo "[FAIL] $label: expect response contains '$needle'"
+    echo "response: $haystack"
+    exit 1
+  fi
+  echo "[PASS] $label"
+}
+
+assert_contains_any() {
+  local haystack="$1"
+  local label="$2"
+  shift 2
+  local needle
+  for needle in "$@"; do
+    if [[ "$haystack" == *"$needle"* ]]; then
+      echo "[PASS] $label"
+      return
+    fi
+  done
+  echo "[FAIL] $label: none of expected markers found"
+  echo "response: $haystack"
+  exit 1
+}
+
 if [[ ! -f "$DOCX_FILE" ]]; then
   echo "DOCX_FILE not found: $DOCX_FILE"
   exit 1
@@ -25,10 +53,13 @@ if [[ ! -f "$XLSX_FILE" ]]; then
 fi
 
 echo "== 1) Health Check =="
-curl -s "$BASE_URL/healthz"; echo
+health_resp="$(curl -s "$BASE_URL/healthz")"
+echo "$health_resp"
+assert_contains "$health_resp" "ok" "health check"
+echo
 
 echo "== 2) Admin Import Knowledge (multipart) =="
-curl -s -X POST "$BASE_URL/api/v1/admin/knowledge/import" \
+import_resp="$(curl -s -X POST "$BASE_URL/api/v1/admin/knowledge/import" \
   -H "X-User-Id: $ADMIN_USER_ID" \
   -H "X-User-Role: $ADMIN_ROLE" \
   -H "X-User-Class-Id: $ADMIN_CLASS_ID" \
@@ -37,31 +68,105 @@ curl -s -X POST "$BASE_URL/api/v1/admin/knowledge/import" \
   -F "answer=请按附件准备并提交" \
   -F "keywords=奖学金,申请,材料" \
   -F "files=@$DOCX_FILE" \
-  -F "files=@$XLSX_FILE"
+  -F "files=@$XLSX_FILE")"
+echo "$import_resp"
+assert_contains_any "$import_resp" "import knowledge" "\"question\":\"奖学金申请材料有哪些\"" "\"Question\":\"奖学金申请材料有哪些\""
+import_id="$(sed -n 's/.*"id":[[:space:]]*\([0-9][0-9]*\).*/\1/p' <<<"$import_resp" | head -n1)"
+if [[ -z "$import_id" ]]; then
+  import_id="$(sed -n 's/.*"ID":[[:space:]]*\([0-9][0-9]*\).*/\1/p' <<<"$import_resp" | head -n1)"
+fi
+if [[ -z "$import_id" ]]; then
+  echo "[FAIL] import knowledge: failed to parse id"
+  exit 1
+fi
+echo "Imported knowledge id: $import_id"
 echo
 
 echo "== 3) Student Search by Normal Keywords =="
-curl -s "$BASE_URL/api/v1/knowledge/search?q=奖学金申请" \
+search_keyword_resp="$(curl -s "$BASE_URL/api/v1/knowledge/search?q=奖学金申请" \
   -H "X-User-Id: $STUDENT_USER_ID" \
   -H "X-User-Role: $STUDENT_ROLE" \
   -H "X-User-Class-Id: $STUDENT_CLASS_ID" \
-  -H "X-User-Grade: $STUDENT_GRADE"
+  -H "X-User-Grade: $STUDENT_GRADE")"
+echo "$search_keyword_resp"
+assert_contains "$search_keyword_resp" "\"total\":" "student search has total"
+assert_contains "$search_keyword_resp" "奖学金申请材料有哪些" "student search keyword hit"
 echo
 
 echo "== 4) Student Search by Doc Content Keywords =="
-curl -s "$BASE_URL/api/v1/knowledge/search?q=综测排名证明" \
+search_doc_resp="$(curl -s "$BASE_URL/api/v1/knowledge/search?q=综测排名证明" \
   -H "X-User-Id: $STUDENT_USER_ID" \
   -H "X-User-Role: $STUDENT_ROLE" \
   -H "X-User-Class-Id: $STUDENT_CLASS_ID" \
-  -H "X-User-Grade: $STUDENT_GRADE"
+  -H "X-User-Grade: $STUDENT_GRADE")"
+echo "$search_doc_resp"
+assert_contains "$search_doc_resp" "\"total\":" "doc search has total"
+assert_contains "$search_doc_resp" "奖学金申请材料有哪些" "student search doc content hit"
 echo
 
 echo "== 5) Admin List Knowledge =="
-curl -s "$BASE_URL/api/v1/admin/knowledge?query=奖学金&limit=20&offset=0" \
+admin_list_resp="$(curl -s "$BASE_URL/api/v1/admin/knowledge?query=奖学金&limit=20&offset=0" \
   -H "X-User-Id: $ADMIN_USER_ID" \
   -H "X-User-Role: $ADMIN_ROLE" \
   -H "X-User-Class-Id: $ADMIN_CLASS_ID" \
-  -H "X-User-Grade: $ADMIN_GRADE"
+  -H "X-User-Grade: $ADMIN_GRADE")"
+echo "$admin_list_resp"
+assert_contains "$admin_list_resp" "\"total\":" "admin list has total"
+assert_contains "$admin_list_resp" "奖学金申请材料有哪些" "admin list query hit"
+echo
+
+echo "== 6) Admin Get Knowledge By ID =="
+admin_get_resp="$(curl -s "$BASE_URL/api/v1/admin/knowledge/$import_id" \
+  -H "X-User-Id: $ADMIN_USER_ID" \
+  -H "X-User-Role: $ADMIN_ROLE" \
+  -H "X-User-Class-Id: $ADMIN_CLASS_ID" \
+  -H "X-User-Grade: $ADMIN_GRADE")"
+echo "$admin_get_resp"
+assert_contains_any "$admin_get_resp" "admin get by id" "\"id\":$import_id" "\"ID\":$import_id"
+echo
+
+echo "== 7) Admin Patch Knowledge =="
+admin_patch_resp="$(curl -s -X PATCH "$BASE_URL/api/v1/admin/knowledge/$import_id" \
+  -H "Content-Type: application/json" \
+  -H "X-User-Id: $ADMIN_USER_ID" \
+  -H "X-User-Role: $ADMIN_ROLE" \
+  -H "X-User-Class-Id: $ADMIN_CLASS_ID" \
+  -H "X-User-Grade: $ADMIN_GRADE" \
+  -d '{"answer":"请按最新附件材料提交"}')"
+echo "$admin_patch_resp"
+assert_contains "$admin_patch_resp" "\"updated\":true" "admin patch success"
+echo
+
+echo "== 8) Admin Patch Non-Existing Knowledge =="
+admin_patch_404_resp="$(curl -s -X PATCH "$BASE_URL/api/v1/admin/knowledge/99999999" \
+  -H "Content-Type: application/json" \
+  -H "X-User-Id: $ADMIN_USER_ID" \
+  -H "X-User-Role: $ADMIN_ROLE" \
+  -H "X-User-Class-Id: $ADMIN_CLASS_ID" \
+  -H "X-User-Grade: $ADMIN_GRADE" \
+  -d '{"answer":"not found"}')"
+echo "$admin_patch_404_resp"
+assert_contains "$admin_patch_404_resp" "knowledge not found" "admin patch 404"
+echo
+
+echo "== 9) Admin Delete Knowledge =="
+admin_delete_resp="$(curl -s -X DELETE "$BASE_URL/api/v1/admin/knowledge/$import_id" \
+  -H "X-User-Id: $ADMIN_USER_ID" \
+  -H "X-User-Role: $ADMIN_ROLE" \
+  -H "X-User-Class-Id: $ADMIN_CLASS_ID" \
+  -H "X-User-Grade: $ADMIN_GRADE")"
+echo "$admin_delete_resp"
+assert_contains "$admin_delete_resp" "\"deleted\":true" "admin delete success"
+echo
+
+echo "== 10) Admin Get Deleted Knowledge =="
+admin_get_deleted_resp="$(curl -s "$BASE_URL/api/v1/admin/knowledge/$import_id" \
+  -H "X-User-Id: $ADMIN_USER_ID" \
+  -H "X-User-Role: $ADMIN_ROLE" \
+  -H "X-User-Class-Id: $ADMIN_CLASS_ID" \
+  -H "X-User-Grade: $ADMIN_GRADE")"
+echo "$admin_get_deleted_resp"
+assert_contains "$admin_get_deleted_resp" "knowledge not found" "admin get deleted item 404"
 echo
 
 echo "Done."

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"mime/multipart"
 	"os"
@@ -70,12 +71,42 @@ func (h *AdminKnowledgeHandler) ListKnowledge(c *gin.Context) {
 
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
-	items, err := h.svc.List(c.Query("query"), limit, offset)
+	items, total, err := h.svc.List(c.Query("query"), limit, offset)
 	if err != nil {
 		response.Error(c, 500, "list knowledge failed")
 		return
 	}
-	response.OK(c, items)
+	c.JSON(200, gin.H{"data": items, "total": total})
+}
+
+// GetKnowledge gets one knowledge item by id.
+func (h *AdminKnowledgeHandler) GetKnowledge(c *gin.Context) {
+	actor, ok := auth.GetActor(c)
+	if !ok {
+		response.Error(c, 401, "unauthorized")
+		return
+	}
+	if !authz.Authorize(actor.Role, authz.ActionKnowledgeGet) {
+		response.Error(c, 403, "forbidden")
+		return
+	}
+
+	id64, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(c, 400, "invalid id")
+		return
+	}
+
+	item, err := h.svc.GetByID(uint(id64))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Error(c, 404, "knowledge not found")
+			return
+		}
+		response.Error(c, 500, "get knowledge failed")
+		return
+	}
+	response.OK(c, item)
 }
 
 // CreateKnowledge creates one knowledge item.
@@ -179,6 +210,10 @@ func (h *AdminKnowledgeHandler) PatchKnowledge(c *gin.Context) {
 	updates["updated_by"] = actor.UserID
 
 	if err := h.svc.Patch(uint(id64), updates); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Error(c, 404, "knowledge not found")
+			return
+		}
 		response.Error(c, 500, "patch knowledge failed")
 		return
 	}
@@ -246,6 +281,43 @@ func (h *AdminKnowledgeHandler) ImportKnowledge(c *gin.Context) {
 		IPAddress:  c.ClientIP(),
 	})
 	response.OK(c, item)
+}
+
+// DeleteKnowledge deletes one knowledge item by id.
+func (h *AdminKnowledgeHandler) DeleteKnowledge(c *gin.Context) {
+	actor, ok := auth.GetActor(c)
+	if !ok {
+		response.Error(c, 401, "unauthorized")
+		return
+	}
+	if !authz.Authorize(actor.Role, authz.ActionKnowledgeDelete) {
+		response.Error(c, 403, "forbidden")
+		return
+	}
+
+	id64, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(c, 400, "invalid id")
+		return
+	}
+
+	if err := h.svc.Delete(uint(id64)); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Error(c, 404, "knowledge not found")
+			return
+		}
+		response.Error(c, 500, "delete knowledge failed")
+		return
+	}
+
+	_ = h.logRepo.Create(model.AdminLog{
+		AdminID:    actor.UserID,
+		Action:     "knowledge.delete",
+		TargetType: "knowledge",
+		TargetID:   uint(id64),
+		IPAddress:  c.ClientIP(),
+	})
+	response.OK(c, gin.H{"deleted": true})
 }
 
 func splitKeywords(raw string) []string {

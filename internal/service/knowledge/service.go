@@ -26,19 +26,19 @@ func NewService(db *gorm.DB) *Service {
 }
 
 // Search returns knowledge items for student-facing query.
-func (s *Service) Search(query string, limit, offset int) ([]model.KnowledgeItem, error) {
+func (s *Service) Search(query string, limit, offset int) ([]model.KnowledgeItem, int64, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
-		return nil, errors.New("missing q")
+		return nil, 0, errors.New("missing q")
 	}
 	limit, offset = normalizePage(limit, offset)
-	return s.repo.Search(query, limit, offset)
+	return s.repo.SearchWithTotal(query, limit, offset)
 }
 
 // List returns knowledge items for admin management.
-func (s *Service) List(query string, limit, offset int) ([]model.KnowledgeItem, error) {
+func (s *Service) List(query string, limit, offset int) ([]model.KnowledgeItem, int64, error) {
 	limit, offset = normalizePage(limit, offset)
-	return s.repo.List(query, limit, offset)
+	return s.repo.ListWithTotal(query, limit, offset)
 }
 
 // Create stores a knowledge item.
@@ -61,6 +61,22 @@ func (s *Service) Patch(id uint, updates map[string]any) error {
 		return errors.New("empty patch")
 	}
 	return s.repo.UpdateByID(id, updates)
+}
+
+// GetByID returns one knowledge item by id.
+func (s *Service) GetByID(id uint) (*model.KnowledgeItem, error) {
+	if id == 0 {
+		return nil, errors.New("invalid id")
+	}
+	return s.repo.GetByID(id)
+}
+
+// Delete deletes one knowledge item by id.
+func (s *Service) Delete(id uint) error {
+	if id == 0 {
+		return errors.New("invalid id")
+	}
+	return s.repo.DeleteByID(id)
 }
 
 func normalizePage(limit, offset int) (int, int) {

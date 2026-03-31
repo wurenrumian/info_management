@@ -36,10 +36,10 @@ func (h *KnowledgeHandler) Search(c *gin.Context) {
 
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
-	items, err := h.svc.Search(c.Query("q"), limit, offset)
+	items, total, err := h.svc.Search(c.Query("q"), limit, offset)
 	if err != nil {
 		response.Error(c, 400, err.Error())
 		return
 	}
-	response.OK(c, items)
+	c.JSON(200, gin.H{"data": items, "total": total})
 }

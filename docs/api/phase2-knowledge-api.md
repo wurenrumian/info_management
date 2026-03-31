@@ -23,6 +23,10 @@
 - `keywords`
 - `content_text`（由导入文件抽取出的正文文本）
 
+检索策略（当前实现）：
+- 先进行全文检索（FTS）
+- 若无命中，回退到分词后的 `LIKE` 检索（中文场景更稳定）
+
 成功响应：
 
 ```json
@@ -39,7 +43,8 @@
       "created_at": "2026-03-31T00:00:00Z",
       "updated_at": "2026-03-31T00:00:00Z"
     }
-  ]
+  ],
+  "total": 42
 }
 ```
 
@@ -52,11 +57,56 @@
 ## Admin Endpoints
 
 - `GET /api/v1/admin/knowledge?query=...&limit=20&offset=0`
+- `GET /api/v1/admin/knowledge/:id`
 - `POST /api/v1/admin/knowledge`
 - `POST /api/v1/admin/knowledge/import`（multipart 上传文件并入库）
 - `PATCH /api/v1/admin/knowledge/:id`
+- `DELETE /api/v1/admin/knowledge/:id`
 
 权限：`role >= 2`
+
+### GET /api/v1/admin/knowledge
+
+成功响应：
+
+```json
+{
+  "data": [
+    {
+      "id": 2,
+      "question": "复学流程是什么",
+      "answer": "提交复学申请并等待审批",
+      "keywords": ["复学", "审批"],
+      "attachments": [{"title": "复学指引", "url": "https://example.com/back"}],
+      "created_by": 200,
+      "updated_by": 200,
+      "created_at": "2026-03-31T00:00:00Z",
+      "updated_at": "2026-03-31T00:00:00Z"
+    }
+  ],
+  "total": 12
+}
+```
+
+### GET /api/v1/admin/knowledge/:id
+
+成功响应：
+
+```json
+{
+  "data": {
+    "id": 2,
+    "question": "复学流程是什么",
+    "answer": "提交复学申请并等待审批",
+    "keywords": ["复学", "审批"],
+    "attachments": [{"title": "复学指引", "url": "https://example.com/back"}],
+    "created_by": 200,
+    "updated_by": 200,
+    "created_at": "2026-03-31T00:00:00Z",
+    "updated_at": "2026-03-31T00:00:00Z"
+  }
+}
+```
 
 ### POST /api/v1/admin/knowledge
 
@@ -109,6 +159,18 @@
 }
 ```
 
+### DELETE /api/v1/admin/knowledge/:id
+
+成功响应：
+
+```json
+{
+  "data": {
+    "deleted": true
+  }
+}
+```
+
 ### POST /api/v1/admin/knowledge/import
 
 `Content-Type: multipart/form-data`
@@ -141,12 +203,17 @@
 - `400 {"error":"empty patch"}`
 - `401 {"error":"unauthorized"}`
 - `403 {"error":"forbidden"}`
+- `404 {"error":"knowledge not found"}`
 - `500 {"error":"list knowledge failed"}`
+- `500 {"error":"get knowledge failed"}`
 - `500 {"error":"patch knowledge failed"}`
+- `500 {"error":"delete knowledge failed"}`
 
 ## Audit Log
 
 以下管理动作会写入 `admin_logs`：
 
 - `knowledge.create`
+- `knowledge.import`
 - `knowledge.patch`
+- `knowledge.delete`

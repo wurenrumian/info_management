@@ -252,7 +252,8 @@ go test ./... -count=1
 
 当前知识库联调脚本：
 - `scripts/dev/make_demo_knowledge_files.sh`（生成联调用 docx/xlsx）
-- `scripts/dev/knowledge_api_curl.sh`（调用知识库导入/搜索接口）
+- `scripts/dev/knowledge_api_curl.sh`（调用知识库导入/搜索/详情/更新/删除接口，包含基础断言）
+- `scripts/dev/knowledge_repo_kingbase_integration.sh`（运行知识库金仓集成测试）
 
 ---
 

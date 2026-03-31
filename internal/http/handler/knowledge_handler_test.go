@@ -53,6 +53,11 @@ func TestKnowledgeSearchByStudent(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Body.String(), "休学申请怎么办理")
+	var payload map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &payload))
+	var total int64
+	require.NoError(t, json.Unmarshal(payload["total"], &total))
+	require.Equal(t, int64(1), total)
 }
 
 func TestKnowledgeSearchRejectsEmptyQuery(t *testing.T) {
@@ -115,6 +120,114 @@ func TestAdminKnowledgeCreateAndPatchWriteAdminLog(t *testing.T) {
 	require.Equal(t, uint(200), logs[0].AdminID)
 	require.Equal(t, created.ID, logs[0].TargetID)
 	require.Equal(t, created.ID, logs[1].TargetID)
+}
+
+func TestAdminKnowledgePatchReturns404WhenNotFound(t *testing.T) {
+	_, r := setupKnowledgeTestRouter(t)
+
+	patchBody := []byte(`{"answer":"不存在记录"}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/knowledge/99999", bytes.NewReader(patchBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-Id", "200")
+	req.Header.Set("X-User-Role", "2")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code)
+	require.Contains(t, w.Body.String(), "knowledge not found")
+}
+
+func TestAdminKnowledgeListIncludesTotal(t *testing.T) {
+	db, r := setupKnowledgeTestRouter(t)
+	require.NoError(t, db.Create(&model.KnowledgeItem{
+		Question:  "奖学金申请条件",
+		Answer:    "绩点和综测达标",
+		Keywords:  datatypes.JSON(`["奖学金"]`),
+		CreatedBy: 999,
+		UpdatedBy: 999,
+	}).Error)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/knowledge?limit=1&offset=0", nil)
+	req.Header.Set("X-User-Id", "200")
+	req.Header.Set("X-User-Role", "2")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var payload map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &payload))
+	var total int64
+	require.NoError(t, json.Unmarshal(payload["total"], &total))
+	require.Equal(t, int64(2), total)
+
+	var data []map[string]any
+	require.NoError(t, json.Unmarshal(payload["data"], &data))
+	require.Len(t, data, 1)
+}
+
+func TestAdminKnowledgeGetByID(t *testing.T) {
+	db, r := setupKnowledgeTestRouter(t)
+	var existing model.KnowledgeItem
+	require.NoError(t, db.Where("question = ?", "休学申请怎么办理").First(&existing).Error)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/knowledge/"+strconv.Itoa(int(existing.ID)), nil)
+	req.Header.Set("X-User-Id", "200")
+	req.Header.Set("X-User-Role", "2")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), "休学申请怎么办理")
+}
+
+func TestAdminKnowledgeGetByIDNotFound(t *testing.T) {
+	_, r := setupKnowledgeTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/knowledge/99999", nil)
+	req.Header.Set("X-User-Id", "200")
+	req.Header.Set("X-User-Role", "2")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code)
+	require.Contains(t, w.Body.String(), "knowledge not found")
+}
+
+func TestAdminKnowledgeDeleteByID(t *testing.T) {
+	db, r := setupKnowledgeTestRouter(t)
+	var existing model.KnowledgeItem
+	require.NoError(t, db.Where("question = ?", "休学申请怎么办理").First(&existing).Error)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/knowledge/"+strconv.Itoa(int(existing.ID)), nil)
+	req.Header.Set("X-User-Id", "200")
+	req.Header.Set("X-User-Role", "2")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), `"deleted":true`)
+
+	var count int64
+	require.NoError(t, db.Model(&model.KnowledgeItem{}).Where("id = ?", existing.ID).Count(&count).Error)
+	require.Equal(t, int64(0), count)
+
+	var logs []model.AdminLog
+	require.NoError(t, db.Where("action = ?", "knowledge.delete").Find(&logs).Error)
+	require.Len(t, logs, 1)
+	require.Equal(t, existing.ID, logs[0].TargetID)
+}
+
+func TestAdminKnowledgeDeleteByIDNotFound(t *testing.T) {
+	_, r := setupKnowledgeTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/knowledge/99999", nil)
+	req.Header.Set("X-User-Id", "200")
+	req.Header.Set("X-User-Role", "2")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code)
+	require.Contains(t, w.Body.String(), "knowledge not found")
 }
 
 func TestAdminKnowledgeImportWithFiles(t *testing.T) {
