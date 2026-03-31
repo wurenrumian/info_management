@@ -16,10 +16,7 @@
 - 管理员按范围查询/更新阶段，支持基础导入
 - 事件审计：每次阶段变更留痕
 
-当前状态：已完成 v0 spec + implementation plan  
-文档：
-- `docs/superpowers/specs/2026-03-31-phase2-partyflow-v0-design.md`
-- `docs/superpowers/plans/2026-03-31-phase2-partyflow-v0.md`
+当前状态：待模块负责人产出 v0 spec 与 implementation plan（按统一规范自行落盘）
 
 ### Phase 2-B：知识库问答（Knowledge Base）
 
@@ -111,5 +108,5 @@
 ## 8. 下一步
 
 1. 先确认本路线图与开发规范  
-2. 按模块分别补 v0 spec + implementation plan（A/B/C/D）  
+2. 各模块负责人独立补 v0 spec + implementation plan（A/B/C/D），命名与位置遵循开发规范
 3. 进入 subagent-driven 或人工并行实施
