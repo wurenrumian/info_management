@@ -1,0 +1,707 @@
+openapi: 3.0.3
+info:
+  title: Manage API
+  version: 1.0.0
+  description: Phase 1 detailed API contract for user-admin-class core modules.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Auth
+  - name: Me
+  - name: Users
+  - name: Classes
+  - name: Admins
+  - name: ImportExport
+  - name: AdminLogs
+paths:
+  /auth/wechat-login:
+    post:
+      tags: [Auth]
+      security: []
+      summary: WeChat login
+      description: Exchange WeChat login code for application session state. Returns tokens for bound users, or bind_required=true when the WeChat identity is not yet bound to a student record.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  description: WeChat login code from mini-program login flow.
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/LoginData'
+  /auth/bind-student:
+    post:
+      tags: [Auth]
+      summary: Bind student id
+      description: Bind current WeChat identity to a student record by student_id and name.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [student_id, name]
+              properties:
+                student_id:
+                  type: string
+                  description: Student number.
+                name:
+                  type: string
+                  description: Student name for basic verification.
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Refresh access token
+      description: Exchange a valid refresh token for a new access token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          access_token: { type: string }
+                          expires_in: { type: integer }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout
+      description: Invalidate the current session or make the current refresh token unusable.
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+  /me:
+    get:
+      tags: [Me]
+      summary: Get current user
+      description: Return the current authenticated user profile.
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/User'
+    patch:
+      tags: [Me]
+      summary: Update current user profile
+      description: Only mutable personal profile fields are allowed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MeUpdateReq'
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+  /users:
+    get:
+      tags: [Users]
+      summary: List users
+      description: List users under the caller's data scope.
+      parameters:
+        - $ref: '#/components/parameters/Keyword'
+        - name: role
+          in: query
+          schema: { type: integer }
+        - name: class_id
+          in: query
+          schema: { type: integer }
+        - name: grade
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/UserPageData'
+    post:
+      tags: [Users]
+      summary: Create user
+      description: Create a user record. Admin-only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreateReq'
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+  /users/{id}:
+    get:
+      tags: [Users]
+      summary: Get user detail
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/User'
+    patch:
+      tags: [Users]
+      summary: Update user
+      description: Update a user record. Admin-only.
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreateReq'
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+  /classes:
+    get:
+      tags: [Classes]
+      summary: List classes
+      description: List classes under the caller's data scope.
+      parameters:
+        - $ref: '#/components/parameters/Keyword'
+        - name: grade
+          in: query
+          schema: { type: string }
+        - name: major
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ClassPageData'
+    post:
+      tags: [Classes]
+      summary: Create class
+      description: Create a class record. Admin-only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClassCreateReq'
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+  /classes/{id}:
+    patch:
+      tags: [Classes]
+      summary: Update class
+      description: Update class metadata. Admin-only.
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClassCreateReq'
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+  /classes/{id}/members:batch-bind:
+    post:
+      tags: [Classes]
+      summary: Batch bind class members
+      description: Bind multiple users to the target class. Conflicting active memberships should be treated as business conflicts.
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_ids]
+              properties:
+                user_ids:
+                  type: array
+                  items: { type: integer }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+  /admins:
+    get:
+      tags: [Admins]
+      summary: List admins
+      description: List admin mappings under the caller's scope.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Admin'
+                          total: { type: integer }
+                          page: { type: integer }
+                          page_size: { type: integer }
+    post:
+      tags: [Admins]
+      summary: Create admin mapping
+      description: Create a user-to-admin capability mapping.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCreateReq'
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+  /admins/{id}:
+    patch:
+      tags: [Admins]
+      summary: Update admin mapping
+      description: Update admin level and management scope.
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCreateReq'
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+  /imports/users:
+    post:
+      tags: [ImportExport]
+      summary: Create user import job
+      description: Upload a user import file and create an async import job.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          job_id: { type: string }
+  /imports/classes:
+    post:
+      tags: [ImportExport]
+      summary: Create class import job
+      description: Upload a class import file and create an async import job.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          job_id: { type: string }
+  /imports/{job_id}:
+    get:
+      tags: [ImportExport]
+      summary: Get import job status
+      description: Query job type, counters, status, and error report reference.
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ImportJobData'
+  /exports/users:
+    get:
+      tags: [ImportExport]
+      summary: Export users by filters
+      description: Export users under the current filter and caller scope.
+      parameters:
+        - $ref: '#/components/parameters/Keyword'
+        - name: role
+          in: query
+          schema: { type: integer }
+        - name: class_id
+          in: query
+          schema: { type: integer }
+        - name: grade
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: file stream or signed url
+  /admin-logs:
+    get:
+      tags: [AdminLogs]
+      summary: Query admin logs
+      description: Query management audit logs under the caller's permission scope.
+      parameters:
+        - name: admin_id
+          in: query
+          schema: { type: integer }
+        - name: action
+          in: query
+          schema: { type: string }
+        - name: target_type
+          in: query
+          schema: { type: string }
+        - name: date_from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: date_to
+          in: query
+          schema: { type: string, format: date-time }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/AdminLog'
+                          total: { type: integer }
+                          page: { type: integer }
+                          page_size: { type: integer }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+    Keyword:
+      name: keyword
+      in: query
+      schema:
+        type: string
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+    PageSize:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        default: 20
+        maximum: 100
+  schemas:
+    Envelope:
+      type: object
+      properties:
+        code: { type: integer, example: 0 }
+        message: { type: string, example: ok }
+        data: {}
+        request_id: { type: string, example: req_20260331_xxx }
+    LoginData:
+      type: object
+      properties:
+        access_token: { type: string, nullable: true }
+        refresh_token: { type: string, nullable: true }
+        expires_in: { type: integer, example: 7200, nullable: true }
+        bind_required: { type: boolean }
+        user:
+          allOf:
+            - $ref: '#/components/schemas/User'
+          nullable: true
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        student_id: { type: string }
+        name: { type: string }
+        role: { type: integer }
+        class_id: { type: integer, nullable: true }
+        grade: { type: string, nullable: true }
+        major: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        extra_attrs:
+          type: object
+          additionalProperties: true
+    MeUpdateReq:
+      type: object
+      properties:
+        phone: { type: string }
+        extra_attrs:
+          type: object
+          additionalProperties: true
+    UserCreateReq:
+      type: object
+      required: [name, role]
+      properties:
+        student_id: { type: string }
+        name: { type: string }
+        role: { type: integer }
+        class_id: { type: integer }
+        grade: { type: string }
+        major: { type: string }
+        phone: { type: string }
+        extra_attrs:
+          type: object
+          additionalProperties: true
+    UserPageData:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+    Class:
+      type: object
+      properties:
+        id: { type: integer }
+        class_name: { type: string }
+        grade: { type: string }
+        major: { type: string }
+        counselor_user_id: { type: integer, nullable: true }
+        head_student_user_id: { type: integer, nullable: true }
+    ClassCreateReq:
+      type: object
+      required: [class_name, grade, major]
+      properties:
+        class_name: { type: string }
+        grade: { type: string }
+        major: { type: string }
+        counselor_user_id: { type: integer }
+        head_student_user_id: { type: integer }
+    ClassPageData:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Class'
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+    Admin:
+      type: object
+      properties:
+        id: { type: integer }
+        user_id: { type: integer }
+        admin_level: { type: integer }
+        managed_class_ids:
+          type: array
+          items: { type: integer }
+        managed_grade_scope:
+          type: array
+          items: { type: string }
+    AdminCreateReq:
+      type: object
+      required: [user_id, admin_level]
+      properties:
+        user_id: { type: integer }
+        admin_level: { type: integer }
+        managed_class_ids:
+          type: array
+          items: { type: integer }
+        managed_grade_scope:
+          type: array
+          items: { type: string }
+    ImportJobData:
+      type: object
+      properties:
+        job_id: { type: string }
+        job_type: { type: string, enum: [users, classes] }
+        status:
+          type: string
+          enum: [pending, processing, success, partial_success, failed]
+        total_rows: { type: integer }
+        success_rows: { type: integer }
+        failed_rows: { type: integer }
+        error_report_url: { type: string, nullable: true }
+        detail_summary:
+          type: object
+          additionalProperties: true
+    AdminLog:
+      type: object
+      properties:
+        id: { type: integer }
+        admin_id: { type: integer }
+        action: { type: string }
+        target_type: { type: string }
+        target_id: { type: integer, nullable: true }
+        detail:
+          type: object
+          additionalProperties: true
+        ip_address: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
