@@ -1,6 +1,9 @@
 package router
 
 import (
+	"os"
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
@@ -12,16 +15,24 @@ func New(db *gorm.DB) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.GET("/healthz", handler.Health)
+	uploadDir := strings.TrimSpace(os.Getenv("KNOWLEDGE_UPLOAD_DIR"))
+	if uploadDir == "" {
+		uploadDir = "./data/uploads/knowledge"
+	}
+	r.Static("/uploads/knowledge", uploadDir)
 
 	api := r.Group("/api/v1")
 	api.Use(middleware.IdentityFromHeaders())
 
 	meHandler := handler.NewMeHandler(db)
+	knowledgeHandler := handler.NewKnowledgeHandler(db)
 	adminUserHandler := handler.NewAdminUserHandler(db)
 	adminClassHandler := handler.NewAdminClassHandler(db)
 	adminLogHandler := handler.NewAdminLogHandler(db)
+	adminKnowledgeHandler := handler.NewAdminKnowledgeHandler(db)
 
 	api.GET("/me", meHandler.GetMe)
+	api.GET("/knowledge/search", knowledgeHandler.Search)
 
 	admin := api.Group("/admin")
 	admin.GET("/users", adminUserHandler.ListUsers)
@@ -34,6 +45,10 @@ func New(db *gorm.DB) *gin.Engine {
 	admin.PATCH("/classes/:id", adminClassHandler.PatchClass)
 
 	admin.GET("/logs", adminLogHandler.ListLogs)
+	admin.GET("/knowledge", adminKnowledgeHandler.ListKnowledge)
+	admin.POST("/knowledge", adminKnowledgeHandler.CreateKnowledge)
+	admin.POST("/knowledge/import", adminKnowledgeHandler.ImportKnowledge)
+	admin.PATCH("/knowledge/:id", adminKnowledgeHandler.PatchKnowledge)
 
 	return r
 }

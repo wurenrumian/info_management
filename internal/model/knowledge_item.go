@@ -11,6 +11,7 @@ type KnowledgeItem struct {
 	ID          uint           `gorm:"primaryKey"`
 	Question    string         `gorm:"type:text;not null"`
 	Answer      string         `gorm:"type:text;not null"`
+	ContentText string         `gorm:"type:text"`
 	Keywords    datatypes.JSON `gorm:"type:jsonb"`
 	Attachments datatypes.JSON `gorm:"type:jsonb"`
 	CreatedBy   uint           `gorm:"index;not null"`
@@ -18,4 +19,3 @@ type KnowledgeItem struct {
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
-

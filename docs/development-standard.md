@@ -11,7 +11,7 @@
 
 ## 1. 技术基线
 
-- 语言：Go 1.22+
+- 语言：Go 1.24.1+
 - Web：Gin
 - ORM：GORM
 - 生产数据库：PostgreSQL / Kingbase（PostgreSQL 兼容）
@@ -20,6 +20,22 @@
 约束：
 - 禁止硬编码数据库连接信息
 - 连接串只允许通过 `DATABASE_DSN` 注入
+
+团队开发环境（Kingbase 本地/测试容器）统一约定：
+- 用户名：`system`
+- 密码：`123456`
+- 数据库：`test`
+- 端口：`54321`
+- 证书：使用金仓提供的根目录 `.dat` 根证书文件（本机路径）
+
+推荐 `DATABASE_DSN` 写法（开发环境参考）：
+```bash
+export DATABASE_DSN='host=127.0.0.1 port=54321 user=system password=123456 dbname=test sslmode=verify-ca sslrootcert=/path/to/root.dat'
+```
+
+说明：
+- 以上账号密码仅用于团队本地开发/联调，不得用于生产环境
+- 生产环境必须使用独立凭据，并通过部署平台注入 `DATABASE_DSN`
 
 ---
 
@@ -142,6 +158,27 @@ db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 - 至少 1 条 403 用例
 - 至少 1 条跨班/跨年级 scope 用例
 
+金仓集成测试（长期建议）：
+```bash
+KINGBASE_DSN='host=127.0.0.1 port=54321 user=system password=123456 dbname=test sslmode=disable' \
+go test ./internal/repo -tags=integration -run TestKnowledgeRepoSearchWithKingbase -count=1
+```
+说明：
+- 该命令用于验证知识库在 Kingbase 的真实全文检索链路（`to_tsvector/plainto_tsquery/ts_rank`）
+- 知识库检索范围应覆盖：`question` / `answer` / `keywords` / `content_text`（导入文档抽取文本）
+- 若启用证书，请将 `sslmode` 与 `sslrootcert` 按实际环境调整
+- 不强制固定 DSN 模板，允许根据 Docker/Windows/本地部署方式调整连接参数
+- 无论是否改动 SQL，联调阶段都建议至少执行 1 次金仓联合测试，尽早暴露环境差异问题
+
+金仓联合测试环境约定（Docker / Windows）：
+- Docker 镜像场景：建议端口映射 `54321:54321`，DSN 使用 `host=127.0.0.1 port=54321`
+- Windows 本机金仓场景：DSN 优先使用 `host=127.0.0.1`；若 WSL 无法直连，再改用 `host=host.docker.internal` 或实际 Windows IP
+- 证书场景：统一使用金仓根目录 `.dat` 根证书文件，参考写法：
+```bash
+KINGBASE_DSN='host=127.0.0.1 port=54321 user=system password=123456 dbname=test sslmode=verify-ca sslrootcert=/path/to/root.dat'
+```
+- 集成测试通过标准：测试中需至少覆盖“建表/迁移 + 插入 + 检索命中 + 检索无命中”完整链路
+
 合并前必须通过：
 ```bash
 go test ./... -count=1
@@ -204,7 +241,22 @@ go test ./... -count=1
 
 ---
 
-## 12. CI / 合并门槛
+## 12. 联调脚本管理
+
+团队联调脚本统一放在：`scripts/dev/`
+
+约束：
+- 可复用的联调脚本应提交到仓库，避免个人本地散落脚本
+- 脚本必须通过环境变量接收可变参数，不得硬编码生产凭据
+- 脚本只提交源码，不提交运行产物（例如上传目录内文件）
+
+当前知识库联调脚本：
+- `scripts/dev/make_demo_knowledge_files.sh`（生成联调用 docx/xlsx）
+- `scripts/dev/knowledge_api_curl.sh`（调用知识库导入/搜索接口）
+
+---
+
+## 13. CI / 合并门槛
 
 最低门槛：
 - `go test ./... -count=1` 通过

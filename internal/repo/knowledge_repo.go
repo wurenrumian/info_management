@@ -28,10 +28,10 @@ func (r *KnowledgeRepo) Search(query string, limit, offset int) ([]model.Knowled
 		sql := `
 SELECT *
 FROM knowledge_items
-WHERE to_tsvector('simple', coalesce(question, '') || ' ' || coalesce(answer, '') || ' ' || coalesce(keywords::text, ''))
+WHERE to_tsvector('simple', coalesce(question, '') || ' ' || coalesce(answer, '') || ' ' || coalesce(content_text, '') || ' ' || coalesce(keywords::text, ''))
       @@ plainto_tsquery('simple', ?)
 ORDER BY ts_rank(
-	to_tsvector('simple', coalesce(question, '') || ' ' || coalesce(answer, '') || ' ' || coalesce(keywords::text, '')),
+	to_tsvector('simple', coalesce(question, '') || ' ' || coalesce(answer, '') || ' ' || coalesce(content_text, '') || ' ' || coalesce(keywords::text, '')),
 	plainto_tsquery('simple', ?)
 ) DESC, id DESC
 LIMIT ? OFFSET ?`
@@ -42,7 +42,7 @@ LIMIT ? OFFSET ?`
 	like := "%" + query + "%"
 	var out []model.KnowledgeItem
 	err := r.db.Model(&model.KnowledgeItem{}).
-		Where("question LIKE ? OR answer LIKE ? OR keywords LIKE ?", like, like, like).
+		Where("question LIKE ? OR answer LIKE ? OR content_text LIKE ? OR keywords LIKE ?", like, like, like, like).
 		Order("id desc").
 		Limit(limit).
 		Offset(offset).
@@ -70,4 +70,3 @@ func (r *KnowledgeRepo) Create(item *model.KnowledgeItem) error {
 func (r *KnowledgeRepo) UpdateByID(id uint, updates map[string]any) error {
 	return r.db.Model(&model.KnowledgeItem{}).Where("id = ?", id).Updates(updates).Error
 }
-
