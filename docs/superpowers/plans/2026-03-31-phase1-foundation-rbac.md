@@ -20,7 +20,7 @@
 - Create: `internal/http/handler/health.go`
 - Test: `internal/http/handler/health_test.go`
 
-- [ ] **Step 1: Write module and dependency file**
+- [x] **Step 1: Write module and dependency file**
 
 ```go
 module manage
@@ -37,7 +37,7 @@ require (
 )
 ```
 
-- [ ] **Step 2: Add server main entry**
+- [x] **Step 2: Add server main entry**
 
 ```go
 // cmd/server/main.go
@@ -55,7 +55,7 @@ func main() {
 }
 ```
 
-- [ ] **Step 3: Add app bootstrap**
+- [x] **Step 3: Add app bootstrap**
 
 ```go
 // internal/app/app.go
@@ -78,7 +78,7 @@ func Run() error {
 }
 ```
 
-- [ ] **Step 4: Add router + health endpoint**
+- [x] **Step 4: Add router + health endpoint**
 
 ```go
 // internal/http/router/router.go
@@ -109,7 +109,7 @@ func Health(c *gin.Context) {
 }
 ```
 
-- [ ] **Step 5: Add endpoint test**
+- [x] **Step 5: Add endpoint test**
 
 ```go
 // internal/http/handler/health_test.go
@@ -134,12 +134,12 @@ func TestHealthz(t *testing.T) {
 }
 ```
 
-- [ ] **Step 6: Run test command**
+- [x] **Step 6: Run test command**
 
 Run: `go test ./internal/http/handler -run TestHealthz -count=1`  
 Expected: PASS
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add go.mod cmd/server/main.go internal/app/app.go internal/http/router/router.go internal/http/handler/health.go internal/http/handler/health_test.go
@@ -157,7 +157,7 @@ git commit -m "chore: bootstrap go backend skeleton with health check"
 - Modify: `internal/app/app.go`
 - Test: `internal/model/model_migrate_test.go`
 
-- [ ] **Step 1: Add migration test**
+- [x] **Step 1: Add migration test**
 
 ```go
 // internal/model/model_migrate_test.go
@@ -180,7 +180,7 @@ func TestAutoMigrateCoreTables(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Add role constants**
+- [x] **Step 2: Add role constants**
 
 ```go
 // internal/model/role.go
@@ -194,7 +194,7 @@ const (
 )
 ```
 
-- [ ] **Step 3: Add `User`, `Class`, `AdminLog` models**
+- [x] **Step 3: Add `User`, `Class`, `AdminLog` models**
 
 ```go
 // internal/model/user.go
@@ -248,7 +248,7 @@ type AdminLog struct {
 }
 ```
 
-- [ ] **Step 4: Add DB open + migrate function**
+- [x] **Step 4: Add DB open + migrate function**
 
 ```go
 // internal/store/db.go
@@ -273,7 +273,7 @@ func OpenAndMigrate(dsn string) (*gorm.DB, error) {
 }
 ```
 
-- [ ] **Step 5: Wire DB bootstrap in app**
+- [x] **Step 5: Wire DB bootstrap in app**
 
 ```go
 // internal/app/app.go (replace imports and Run)
@@ -308,12 +308,12 @@ func Run() error {
 }
 ```
 
-- [ ] **Step 6: Run migration test**
+- [x] **Step 6: Run migration test**
 
 Run: `go test ./internal/model -run TestAutoMigrateCoreTables -count=1`  
 Expected: PASS
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add internal/model internal/store/db.go internal/app/app.go
@@ -328,7 +328,7 @@ git commit -m "feat: add core models and migration bootstrap"
 - Modify: `internal/http/router/router.go`
 - Test: `internal/http/middleware/identity_test.go`
 
-- [ ] **Step 1: Add actor type and context helpers**
+- [x] **Step 1: Add actor type and context helpers**
 
 ```go
 // internal/auth/actor.go
@@ -373,7 +373,7 @@ func ParseUintHeader(c *gin.Context, key string) (uint, bool) {
 }
 ```
 
-- [ ] **Step 2: Add identity middleware implementation**
+- [x] **Step 2: Add identity middleware implementation**
 
 ```go
 // internal/http/middleware/identity.go
@@ -408,7 +408,7 @@ func IdentityFromHeaders() gin.HandlerFunc {
 }
 ```
 
-- [ ] **Step 3: Wire middleware on `/api/v1` route group**
+- [x] **Step 3: Wire middleware on `/api/v1` route group**
 
 ```go
 // internal/http/router/router.go (add)
@@ -416,7 +416,7 @@ api := r.Group("/api/v1")
 api.Use(middleware.IdentityFromHeaders())
 ```
 
-- [ ] **Step 4: Add middleware test**
+- [x] **Step 4: Add middleware test**
 
 ```go
 // internal/http/middleware/identity_test.go
@@ -454,12 +454,12 @@ func TestIdentityMiddlewareInjectsActor(t *testing.T) {
 }
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `go test ./internal/http/middleware -count=1`  
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/auth/actor.go internal/http/middleware/identity.go internal/http/middleware/identity_test.go internal/http/router/router.go
@@ -475,7 +475,7 @@ git commit -m "feat: add phase1 header identity middleware"
 - Test: `internal/service/authz/authorize_test.go`
 - Test: `internal/service/authz/scope_test.go`
 
-- [ ] **Step 1: Add action constants and authorization logic**
+- [x] **Step 1: Add action constants and authorization logic**
 
 ```go
 // internal/service/authz/actions.go
@@ -516,7 +516,7 @@ func Authorize(role int, action string) bool {
 }
 ```
 
-- [ ] **Step 2: Add scope builder implementation**
+- [x] **Step 2: Add scope builder implementation**
 
 ```go
 // internal/service/authz/scope.go
@@ -547,7 +547,7 @@ func BuildScope(a auth.Actor) Scope {
 }
 ```
 
-- [ ] **Step 3: Add authorization matrix test**
+- [x] **Step 3: Add authorization matrix test**
 
 ```go
 // internal/service/authz/authorize_test.go
@@ -581,7 +581,7 @@ func TestAuthorizeMatrix(t *testing.T) {
 }
 ```
 
-- [ ] **Step 4: Add scope test**
+- [x] **Step 4: Add scope test**
 
 ```go
 // internal/service/authz/scope_test.go
@@ -604,12 +604,12 @@ func TestBuildScope(t *testing.T) {
 }
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `go test ./internal/service/authz -count=1`  
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/service/authz
@@ -624,7 +624,7 @@ git commit -m "feat: implement authorization matrix and scope builder"
 - Create: `internal/repo/admin_log_repo.go`
 - Test: `internal/repo/user_repo_test.go`
 
-- [ ] **Step 1: Implement user repository with scope filtering**
+- [x] **Step 1: Implement user repository with scope filtering**
 
 ```go
 // internal/repo/user_repo.go
@@ -659,7 +659,7 @@ func (r *UserRepo) ListByScope(scope authz.Scope, limit, offset int) ([]model.Us
 }
 ```
 
-- [ ] **Step 2: Implement class repository and admin log repository**
+- [x] **Step 2: Implement class repository and admin log repository**
 
 ```go
 // internal/repo/class_repo.go
@@ -717,7 +717,7 @@ func (r *AdminLogRepo) List(limit, offset int) ([]model.AdminLog, error) {
 }
 ```
 
-- [ ] **Step 3: Add repository behavior test**
+- [x] **Step 3: Add repository behavior test**
 
 ```go
 // internal/repo/user_repo_test.go
@@ -761,12 +761,12 @@ func TestUserRepoListByScope(t *testing.T) {
 }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `go test ./internal/repo -count=1`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/repo
@@ -787,7 +787,7 @@ git commit -m "feat: add scope-aware repositories"
 - Create: `docs/api/phase1-foundation-api.md`
 - Modify: `README.md`
 
-- [ ] **Step 1: Add HTTP response helpers**
+- [x] **Step 1: Add HTTP response helpers**
 
 ```go
 // internal/http/response/response.go
@@ -799,7 +799,7 @@ func OK(c *gin.Context, data any) { c.JSON(200, gin.H{"data": data}) }
 func Error(c *gin.Context, status int, msg string) { c.JSON(status, gin.H{"error": msg}) }
 ```
 
-- [ ] **Step 2: Implement handlers with strict authz + scope checks**
+- [x] **Step 2: Implement handlers with strict authz + scope checks**
 
 ```go
 // shared handler pattern
@@ -832,7 +832,7 @@ _ = h.logRepo.Create(model.AdminLog{
 })
 ```
 
-- [ ] **Step 3: Register routes**
+- [x] **Step 3: Register routes**
 
 ```go
 // /api/v1/me
@@ -843,7 +843,7 @@ _ = h.logRepo.Create(model.AdminLog{
 // /api/v1/admin/logs [GET]
 ```
 
-- [ ] **Step 4: Add handler tests with concrete role assertions**
+- [x] **Step 4: Add handler tests with concrete role assertions**
 
 ```go
 // internal/http/handler/phase1_handlers_test.go
@@ -866,7 +866,7 @@ func TestPhase1Handlers_RoleChecks(t *testing.T) {
 }
 ```
 
-- [ ] **Step 5: Add API contract smoke test**
+- [x] **Step 5: Add API contract smoke test**
 
 ```go
 // tests/api_contract_test.go
@@ -879,7 +879,7 @@ func TestPhase1Contract_RoleMatrix(t *testing.T) {
 }
 ```
 
-- [ ] **Step 6: Add API documentation**
+- [x] **Step 6: Add API documentation**
 
 ```md
 # Phase1 Foundation API
@@ -891,14 +891,23 @@ func TestPhase1Contract_RoleMatrix(t *testing.T) {
 - X-User-Grade (required for teacher grade scope)
 ```
 
-- [ ] **Step 7: Run full verification**
+- [x] **Step 7: Run full verification**
 
 Run: `go test ./... -count=1`  
 Expected: PASS
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add internal/http internal/http/router/router.go tests/api_contract_test.go docs/api/phase1-foundation-api.md README.md
 git commit -m "feat: deliver phase1 rbac APIs with role matrix tests and docs"
 ```
+
+
+## Actual Execution Summary
+
+- Completed Tasks 1-8 in root workspace (D:\Project\Manage) with incremental commits.
+- Implemented phase-1 foundation: core models/migrations, header identity middleware, action authz + scope builder, scope-aware repositories, and student/admin APIs.
+- Added and passed tests for middleware, authz, repositories, handlers, and API role-matrix contract (go test ./... -count=1).
+- Added API documentation at docs/api/phase1-foundation-api.md and refreshed root README.md.
+
