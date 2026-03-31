@@ -18,6 +18,8 @@ func New(db *gorm.DB) *gin.Engine {
 
 	meHandler := handler.NewMeHandler(db)
 	adminUserHandler := handler.NewAdminUserHandler(db)
+	adminClassHandler := handler.NewAdminClassHandler(db)
+	adminLogHandler := handler.NewAdminLogHandler(db)
 
 	api.GET("/me", meHandler.GetMe)
 
@@ -25,6 +27,13 @@ func New(db *gorm.DB) *gin.Engine {
 	admin.GET("/users", adminUserHandler.ListUsers)
 	admin.GET("/users/:id", adminUserHandler.GetUser)
 	admin.PATCH("/users/:id", adminUserHandler.PatchUser)
+
+	admin.GET("/classes", adminClassHandler.ListClasses)
+	admin.GET("/classes/:id", adminClassHandler.GetClass)
+	admin.POST("/classes", adminClassHandler.CreateClass)
+	admin.PATCH("/classes/:id", adminClassHandler.PatchClass)
+
+	admin.GET("/logs", adminLogHandler.ListLogs)
 
 	return r
 }
