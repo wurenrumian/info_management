@@ -1,248 +1,215 @@
-# 开发规范 (Development Standard)
+# 开发规范（Team Development Standard）
 
-本规范适用于所有小组成员，确保代码风格统一、模块可独立开发测试。
+本规范用于多人并行开发，目标是：
+- 减少冲突
+- 提高可集成性
+- 让每个模块可独立开发与验证
 
-<strong><h1 style="color: red;">注意，本文档未充分考虑后续模块的开发</h1></strong>
-
----
-
-## 1. 技术栈约定
-
-| 层级            | 技术选型                                                                |
-| --------------- | ----------------------------------------------------------------------- |
-| 语言            | Go 1.22+                                                                |
-| Web 框架        | Gin                                                                     |
-| ORM             | GORM                                                                    |
-| 开发/测试数据库 | SQLite（`gorm.io/driver/sqlite`）                                       |
-| 生产数据库      | PostgreSQL / 人大金仓（Kingbase）                                       |
-| 路由注册        | Gin Router                                                              |
-| 认证方式        | Header 注入（`X-User-Id` 等），由 `middleware.IdentityFromHeaders` 解析 |
-
-> **注意**：禁止在代码中硬编码数据库连接信息，所有 DSN 通过环境变量 `DATABASE_DSN` 传入。
+适用范围：本仓库所有后端开发、测试、文档与提交流程。
 
 ---
 
-## 2. 项目结构
+## 1. 技术基线
 
-```
+- 语言：Go 1.22+
+- Web：Gin
+- ORM：GORM
+- 生产数据库：PostgreSQL / Kingbase（PostgreSQL 兼容）
+- 测试数据库：SQLite（in-memory）
+
+约束：
+- 禁止硬编码数据库连接信息
+- 连接串只允许通过 `DATABASE_DSN` 注入
+
+---
+
+## 2. 统一目录约定（强制）
+
+```text
 manage/
-├── cmd/
-│   └── server/              # 应用入口，一个 cmd 对应一种部署形态
+├── cmd/server/                     # 进程入口
 ├── internal/
-│   ├── app/                 # 应用启动逻辑
-│   ├── auth/                # 身份标识（Actor 定义）
-│   ├── http/
-│   │   ├── handler/         # 请求处理（一个文件一个资源，如 admin_user_handler.go）
-│   │   ├── middleware/      # 中间件（如身份解析）
-│   │   ├── response/        # 统一响应封装
-│   │   └── router/          # 路由注册
-│   ├── model/               # 数据模型（对应数据库表结构）
-│   ├── repo/                # 数据访问层（CRUD 操作）
-│   │   └── *_test.go        # repo 层测试文件放同包
-│   └── service/
-│       └── authz/           # 权限校验逻辑
-├── docs/                    # 项目文档（architecture/, api/, specs/）
-├── tests/                   # 集成测试或 E2E 测试
-└── go.mod
+│   ├── app/                        # 应用启动
+│   ├── auth/                       # Actor / 身份上下文
+│   ├── model/                      # 表结构定义
+│   ├── repo/                       # 数据访问
+│   ├── service/                    # 业务规则（按模块分目录）
+│   │   ├── authz/
+│   │   ├── partyflow/
+│   │   ├── knowledge/
+│   │   ├── approvals/
+│   │   └── announcements/
+│   └── http/
+│       ├── handler/                # HTTP 入口
+│       ├── middleware/
+│       ├── response/
+│       └── router/
+├── tests/                          # 集成/契约测试
+└── docs/
+    ├── api/
+    └── superpowers/
 ```
 
-**新增模块时的目录结构示例**（以"知识库"为例）：
-
-```
-internal/
-├── model/
-│   └── knowledge.go         # KnowledgeArticle 模型
-├── repo/
-│   └── knowledge_repo.go    # + knowledge_repo_test.go
-├── service/
-│   └── knowledge/           # 业务逻辑封装
-│       └── search.go
-└── http/
-    └── handler/
-        └── knowledge_handler.go
-```
+禁止项：
+- 禁止创建第二套路由入口（仅 `internal/http/router/router.go` 可注册路由）
+- 禁止把业务规则写进 handler（必须下沉到 service）
+- 禁止模块绕过 `authz + scope` 直接全量查数据
 
 ---
 
-## 3. 模块开发规范
+## 3. Phase 2 并行模块与代码归属
 
-### 3.1 Model 层
+当前并行模块：
+- `partyflow`
+- `knowledge`
+- `approvals`
+- `announcements`
 
-- 文件名：`model/资源名.go`（单数形式）
-- 结构体名：PascalCase，如 `KnowledgeArticle`
-- GORM tag 使用小写蛇形：`gorm:"size:20;uniqueIndex;not null"`
-- JSON 字段使用 camelCase：`json:"studentId"`
+每个模块代码必须放在以下位置：
+- model：`internal/model/<module>*.go`
+- repo：`internal/repo/<module>*_repo.go`
+- service：`internal/service/<module>/...`
+- handler：`internal/http/handler/<module>*_handler.go`
+- API 文档：`docs/api/<module>-api.md`
 
-### 3.2 Repo 层
-
-- 文件名：`repo/资源名_repo.go`
-- 构造函数：`NewXxxRepo(db *gorm.DB) *XxxRepo`
-- 所有 `repo` 包的测试必须使用 SQLite in-memory 数据库：
-  ```go
-  db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
-  require.NoError(t, db.AutoMigrate(&model.Xxx{}))
-  ```
-- 禁止在 repo 测试中使用真实的 PostgreSQL DSN
-
-### 3.3 Service 层
-
-- 按业务领域组织，如 `service/authz/`、`service/knowledge/`
-- 纯业务逻辑，无 HTTP 依赖
-- 包含可测试的业务规则
-
-### 3.4 Handler 层
-
-- 文件名：`handler/资源名_handler.go`
-- 响应格式统一使用 `response.OK(c, data)` 或 `response.Error(c, status, msg)`
-- HTTP 状态码约定：
-  - `200` 成功
-  - `400` 请求参数错误
-  - `401` 未认证
-  - `403` 无权限
-  - `404` 资源不存在
-  - `500` 服务器内部错误
-- 禁止在 handler 中直接返回业务错误（如"用户已存在"用 `400` 而非 `200` 带 error 字段）
-
-### 3.5 Router 层
-
-- 所有路由在 `router/router.go` 的 `New(db *gorm.DB) *gin.Engine` 中注册
-- 路由分组：`/api/v1` 提供 RESTful API，`/admin` 前缀的路由需校验权限
-- 新增路由格式：
-  - `GET    /resource`     → List
-  - `GET    /resource/:id` → Get
-  - `POST   /resource`    → Create
-  - `PATCH  /resource/:id` → Update
-  - `DELETE /resource/:id` → Delete（按需提供）
+示例（partyflow）：
+- `internal/model/party_progress.go`
+- `internal/repo/party_progress_repo.go`
+- `internal/service/partyflow/service.go`
+- `internal/http/handler/party_progress_handler.go`
+- `docs/api/phase2-partyflow-api.md`
 
 ---
 
-## 4. 身份与权限
+## 4. 接口与响应规范
 
-### 4.1 身份标识（Header 注入）
+- API 前缀：`/api/v1`
+- 成功响应：`{"data": ...}`
+- 失败响应：`{"error": "..."}`
 
-| Header            | 说明                                           |
-| ----------------- | ---------------------------------------------- |
-| `X-User-Id`       | 用户 ID                                        |
-| `X-User-Role`     | 角色（1=学生, 2=班干部, 3=老师, 4=超级管理员） |
-| `X-User-Class-Id` | 班级 ID（班干部/老师范围控制用）               |
-| `X-User-Grade`    | 年级（老师按年级查看用）                       |
+HTTP 状态码：
+- `200` 成功
+- `400` 参数错误
+- `401` 未认证
+- `403` 无权限
+- `404` 资源不存在
+- `500` 服务器错误
 
-### 4.2 权限校验
-
-- 权限定义在 `service/authz/actions.go`
-- 授权检查：`authz.Authorize(actor.Role, action)`
-- Scope 控制：调用 `authz.BuildScope(actor)` 生成数据过滤条件
+列表接口建议：
+- 入参：`limit`, `offset`
+- 返回：`{"data": [...], "total": N}`（若有总数需求）
 
 ---
 
-## 5. 测试要求
+## 5. 身份与权限规范
 
-### 5.1 必须测试的场景
+身份来源（Phase 1/2）：Header 注入
+- `X-User-Id`
+- `X-User-Role`
+- `X-User-Class-Id`
+- `X-User-Grade`
 
-| 层次          | 测试内容                         |
-| ------------- | -------------------------------- |
-| Repo          | CRUD 操作 + scope 过滤逻辑       |
-| Service/Authz | 权限边界条件                     |
-| Handler       | 请求参数校验、权限拒绝、正常流程 |
+权限流程（必须）：
+1. `auth.GetActor(c)`
+2. `authz.Authorize(actor.Role, action)`
+3. `authz.BuildScope(actor)`
+4. repo 查询/更新应用 scope
 
-### 5.2 测试命令
+---
 
+## 6. 数据与迁移规范
+
+- 开发阶段：`AutoMigrate` 允许追加模型
+- 禁止删除既有 `AutoMigrate` 调用
+- 生产迁移脚本（若需要）放 `docs/migrations/`
+
+GORM 字段约定：
+- 表字段语义稳定优先，变化字段优先放 `jsonb`
+- 时间字段统一：`CreatedAt` / `UpdatedAt`（日志类至少 `CreatedAt`）
+
+---
+
+## 7. 测试规范（强制）
+
+SQLite in-memory 统一写法：
+```go
+db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+```
+
+每个模块最少测试资产：
+- 1 个 handler 测试文件（权限/参数/正常流程）
+- 1 个 repo 或 service 测试文件（scope 或核心规则）
+- 至少 1 条 403 用例
+- 至少 1 条跨班/跨年级 scope 用例
+
+合并前必须通过：
 ```bash
-go test ./... -count=1 -v
-```
-
-### 5.3 测试覆盖率
-
-- **Repo 层**：必须覆盖主要查询路径（List/GET/Patch/Delete）
-- **Authz**：覆盖所有角色 × 动作组合
-
----
-
-## 6. API 设计原则
-
-1. **稳定性**：API 一旦定稿，除非需求变更，不做破坏性修改
-2. **版本化**：通过 URL 前缀 `/api/v1/` 区分版本
-3. **响应格式**：
-   ```json
-   // 成功
-   {"data": {...}}
-   // 失败
-   {"error": "错误描述"}
-   ```
-4. **分页**（List 接口）：使用 `?limit=&offset=` 参数，返回格式：
-   ```json
-   {"data": [...], "total": 100}
-   ```
-5. **更新请求**（PATCH）：使用 JSON body，仅传递需修改的字段（部分更新）
-
----
-
-## 7. 模块 README 要求
-
-每个模块（尤其是新增的功能模块）必须在 `docs/` 下对应的子目录中包含 `README.md`，内容至少包括：
-
-1. **模块概述**：该模块负责什么功能
-2. **数据模型**：核心数据结构及字段说明
-3. **API 列表**：提供的接口及简要说明
-4. **业务规则**：关键业务逻辑说明（如权限、scope 过滤）
-5. **测试说明**：如何运行本模块的测试
-
----
-
-## 8. 代码风格
-
-- **格式化**：`go fmt ./...`
-- **导入顺序**：标准库 → 第三方库 → 内部包（用 `goimports` 自动处理）
-- **命名**：
-  - 包名：简短小写（`repo`, `authz`）
-  - 函数/变量：PascalCase 或 camelCase
-  - 常量：全大写下划线分隔或 PascalCase（按场景选择，保持一致）
-- **错误处理**：禁止忽略 `err`（使用 `_` 显式忽略需加注释说明）
-- **注释**：exported 函数/类型必须添加 GoDoc 注释
-
----
-
-## 9. 数据库迁移
-
-- 开发阶段使用 `db.AutoMigrate(...)`
-- 生产环境变更需编写迁移文件或 SQL 脚本，放在 `docs/migrations/` 目录
-- **禁止删除已有的 `AutoMigrate` 调用**，仅允许追加新模型
-
----
-
-## 10. Git 提交规范（推荐）
-
-```
-<type>: <简短描述>
-
-type: feat | fix | docs | refactor | test | chore
-```
-
-示例：
-```
-feat: 添加知识库模块基础CRUD
-fix: 修复用户scope过滤遗漏班级ID的问题
-docs: 更新knowledge模块README
-test: 为UserRepo添加Update测试用例
+go test ./... -count=1
 ```
 
 ---
 
-## 11. 环境变量
+## 8. 代码风格规范
 
-| 变量           | 说明                       | 默认值           |
-| -------------- | -------------------------- | ---------------- |
-| `DATABASE_DSN` | PostgreSQL/Kingbase 连接串 | 空（仅内存模式） |
-| `PORT`         | HTTP 监听端口              | `8080`           |
+- 格式化：`go fmt ./...`
+- 建议：`go vet ./...`
+- 包名：简短小写
+- 文件名：按资源命名（`*_repo.go`, `*_handler.go`）
+- 导出符号必须有 GoDoc 注释
+- 禁止静默吞错；显式忽略错误需有理由
 
 ---
 
-## 12. 规范执行
+## 9. 分支与提交规范
 
-- **PR 必须通过**：`go test ./...` 全部通过
-- **Lint 检查**（如有 CI）：
-  ```bash
-  go vet ./...
-  go fmt ./...
-  ```
-- 代码审查时重点关注：是否破坏既有接口、是否添加测试、是否更新文档
+分支命名建议：
+- `feat/<module>-<topic>`
+- `fix/<module>-<topic>`
+- `docs/<topic>`
+
+提交信息：
+- `<type>: <summary>`
+- type: `feat|fix|docs|refactor|test|chore`
+
+建议每个任务一个 commit，避免“超大混合提交”。
+
+---
+
+## 10. 并行协作流程
+
+1. 先对齐模块 spec 与 plan（`docs/superpowers/...`）
+2. 按模块 owner 开发，避免跨模块大范围改动
+3. 路由冲突和契约冲突由集成人员统一处理
+4. 合并前完成：代码 + 测试 + API 文档
+
+接口变更流程：
+- 先改 `docs/api/*.md`
+- 再改代码
+- 必须在 PR 中明确“兼容/不兼容”
+
+---
+
+## 11. 文档要求
+
+每个模块至少提供：
+- 模块说明（职责）
+- 数据模型
+- API 列表
+- 权限规则
+- 测试命令
+
+推荐位置：
+- API 文档：`docs/api/`
+- 设计与计划：`docs/superpowers/specs/`、`docs/superpowers/plans/`
+
+---
+
+## 12. CI / 合并门槛
+
+最低门槛：
+- `go test ./... -count=1` 通过
+- 新增功能有测试
+- 路由/API 文档已同步
+- 不破坏现有权限边界
+
+未满足以上任一项，不建议合并。
