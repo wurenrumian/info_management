@@ -246,3 +246,44 @@ test: 为UserRepo添加Update测试用例
   go fmt ./...
   ```
 - 代码审查时重点关注：是否破坏既有接口、是否添加测试、是否更新文档
+
+---
+
+## 13. Phase 2 并行开发约定（新增）
+
+### 13.1 并行模块范围
+
+当前约定并行开发 4 个业务模块：
+
+- `partyflow`（党团流程）
+- `knowledge`（知识库问答）
+- `approvals`（审批流程）
+- `announcements`（信息发布与精准推送）
+
+### 13.2 模块目录放置规则（强制）
+
+每个模块必须放在以下既有层级中，不新增新的技术层目录：
+
+- `internal/model`：模块表结构，文件示例：`party_progress.go`
+- `internal/repo`：模块数据访问，文件示例：`party_progress_repo.go`
+- `internal/service/<module>`：模块业务逻辑，目录示例：`service/partyflow`
+- `internal/http/handler`：模块 HTTP 入口，文件示例：`party_progress_handler.go`
+- `internal/http/router/router.go`：统一注册模块路由
+- `docs/api`：模块 API 文档
+
+### 13.3 并行协作边界
+
+- 禁止模块自行创建独立 router 入口文件。
+- 禁止绕过 `Authorize + BuildScope` 做跨范围数据访问。
+- 禁止在 handler 中堆积复杂业务规则（必须下沉到 service）。
+- 每个模块至少包含：
+- 1 个 handler 测试文件
+- 1 个 repo 或 service 测试文件
+- 1 份 API 文档
+
+### 13.4 合并与验收
+
+- 合并前必须通过：`go test ./... -count=1`
+- 每个并行模块至少提供一条权限边界测试（403 场景）
+- 每个并行模块至少提供一条 scope 过滤测试（跨班/跨年级场景）
+- 由统一集成人员负责跨模块路由冲突与契约冲突处理
