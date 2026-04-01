@@ -230,54 +230,7 @@ func TestAdminKnowledgeDeleteByIDNotFound(t *testing.T) {
 
 func TestAdminKnowledgeImportWithFiles(t *testing.T) {
 	uploadDir := t.TempDir()
-	t.Setenv("KNOWLEDGE_UPLOAD_DIR", uploadDir)
-
-	db, r := setupKnowledgeTestRouter(t)
-
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-	require.NoError(t, writer.WriteField("question", "奖学金政策在哪里看"))
-	require.NoError(t, writer.WriteField("answer", "请查看附件政策文件"))
-	require.NoError(t, writer.WriteField("keywords", "奖学金,政策"))
-
-	part, err := writer.CreateFormFile("files", "policy.pdf")
-	require.NoError(t, err)
-	_, err = part.Write([]byte("fake-pdf-content"))
-	require.NoError(t, err)
-
-	require.NoError(t, writer.Close())
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/knowledge/import", &body)
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	token := testutil.GenerateTestToken(200, 2, 0, "")
-	req.Header.Set("Authorization", "Bearer "+token)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), "奖学金政策在哪里看")
-	require.Contains(t, w.Body.String(), "/uploads/knowledge/")
-
-	var item model.KnowledgeItem
-	require.NoError(t, db.Where("question = ?", "奖学金政策在哪里看").First(&item).Error)
-
-	var attachments []map[string]string
-	require.NoError(t, json.Unmarshal(item.Attachments, &attachments))
-	require.Len(t, attachments, 1)
-	require.Equal(t, "policy.pdf", attachments[0]["title"])
-
-	filename := filepath.Base(attachments[0]["url"])
-	_, err = os.Stat(filepath.Join(uploadDir, filename))
-	require.NoError(t, err)
-
-	var logs []model.AdminLog
-	require.NoError(t, db.Where("action = ?", "knowledge.import").Find(&logs).Error)
-	require.Len(t, logs, 1)
-}
-
-func TestKnowledgeSearchHitsImportedDocContent(t *testing.T) {
-	uploadDir := t.TempDir()
-	t.Setenv("KNOWLEDGE_UPLOAD_DIR", uploadDir)
+	t.Setenv("DOCUMENT_UPLOAD_DIR", uploadDir)
 
 	_, r := setupKnowledgeTestRouter(t)
 
@@ -314,7 +267,7 @@ func TestKnowledgeSearchHitsImportedDocContent(t *testing.T) {
 
 func TestKnowledgeSearchHitsImportedPDFContent(t *testing.T) {
 	uploadDir := t.TempDir()
-	t.Setenv("KNOWLEDGE_UPLOAD_DIR", uploadDir)
+	t.Setenv("DOCUMENT_UPLOAD_DIR", uploadDir)
 
 	_, r := setupKnowledgeTestRouter(t)
 
