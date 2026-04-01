@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"manage/internal/model"
 	"manage/internal/http/router"
+	"manage/internal/model"
 )
 
 func setupTestRouter(t *testing.T) *gorm.DB {
@@ -83,4 +83,3 @@ func TestPatchUserWritesAdminLog(t *testing.T) {
 	require.Equal(t, uint(999), logs[0].AdminID)
 	require.Equal(t, uint(100), logs[0].TargetID)
 }
-

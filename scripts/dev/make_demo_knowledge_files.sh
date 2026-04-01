@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+
+# 个人集成测试使用，如需本地运行可能要更改一些参数
 set -euo pipefail
 
 OUT_DIR="${1:-/tmp}"
@@ -6,6 +8,10 @@ mkdir -p "$OUT_DIR"
 
 DOCX_PATH="$OUT_DIR/knowledge_demo.docx"
 XLSX_PATH="$OUT_DIR/knowledge_demo.xlsx"
+PDF_PATH="$OUT_DIR/knowledge_demo.pdf"
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SAMPLE_PDF="$ROOT_DIR/C++体系学习建议.pdf"
 
 workdir="$(mktemp -d)"
 trap 'rm -rf "$workdir"' EXIT
@@ -124,6 +130,14 @@ XML
   zip -q -r "$XLSX_PATH" .
 )
 
+# ---------- PDF ----------
+if [[ -f "$SAMPLE_PDF" ]]; then
+  cp "$SAMPLE_PDF" "$PDF_PATH"
+else
+  echo "[WARN] sample PDF not found at $SAMPLE_PDF, skipping PDF generation"
+fi
+
 echo "Generated:"
 echo "  $DOCX_PATH"
 echo "  $XLSX_PATH"
+echo "  $PDF_PATH"

@@ -52,10 +52,13 @@ go test ./... -count=1
 # 1) 启动服务（需先设置 DATABASE_DSN）
 go run ./cmd/server
 
-# 2) 生成联调附件
+# 2) 安装系统依赖（PDF提取需要）
+sudo apt-get install -y poppler-utils
+
+# 3) 生成联调附件（含 docx/xlsx/pdf）
 ./scripts/dev/make_demo_knowledge_files.sh /tmp
 
-# 3) 调用导入/检索/管理接口
+# 4) 调用导入/检索/管理接口（含PDF正文搜索验证）
 ./scripts/dev/knowledge_api_curl.sh
 ```
 
@@ -72,9 +75,21 @@ export DATABASE_DSN='host=127.0.0.1 port=54321 user=system password=123456 dbnam
 go run ./cmd/server
 ./scripts/dev/make_demo_knowledge_files.sh /tmp
 ./scripts/dev/knowledge_api_curl.sh
+```
 
-# 4) 跑知识库金仓集成测试
-./scripts/dev/knowledge_repo_kingbase_integration.sh
+## Kingbase Local Test (Docker)
+
+```bash
+# 1) 启动本地金仓容器（个人脚本）
+./scripts/dev/kingbase_docker_up.sh
+
+# 2) 设置连接串
+export DATABASE_DSN='host=127.0.0.1 port=54321 user=system password=123456 dbname=test sslmode=disable'
+
+# 3) 启动服务并执行接口联调
+go run ./cmd/server
+./scripts/dev/make_demo_knowledge_files.sh /tmp
+./scripts/dev/knowledge_api_curl.sh
 ```
 
 ## Team Workflow (Superpowers Optional)

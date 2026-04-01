@@ -314,6 +314,47 @@ func TestKnowledgeSearchHitsImportedDocContent(t *testing.T) {
 	require.Contains(t, searchW.Body.String(), "奖学金申请材料")
 }
 
+func TestKnowledgeSearchHitsImportedPDFContent(t *testing.T) {
+	uploadDir := t.TempDir()
+	t.Setenv("KNOWLEDGE_UPLOAD_DIR", uploadDir)
+
+	_, r := setupKnowledgeTestRouter(t)
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	root := filepath.Join(wd, "..", "..", "..")
+	pdfPath := filepath.Join(root, "internal", "service", "knowledge", "testdata", "sample.pdf")
+	pdfBytes, err := os.ReadFile(pdfPath)
+	require.NoError(t, err)
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	require.NoError(t, writer.WriteField("question", "C++学习路线"))
+	require.NoError(t, writer.WriteField("answer", "请查看附件学习建议"))
+	part, err := writer.CreateFormFile("files", "cpp_guide.pdf")
+	require.NoError(t, err)
+	_, err = part.Write(pdfBytes)
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	importReq := httptest.NewRequest(http.MethodPost, "/api/v1/admin/knowledge/import", &body)
+	importReq.Header.Set("Content-Type", writer.FormDataContentType())
+	importReq.Header.Set("X-User-Id", "200")
+	importReq.Header.Set("X-User-Role", "2")
+	importW := httptest.NewRecorder()
+	r.ServeHTTP(importW, importReq)
+	require.Equal(t, http.StatusOK, importW.Code)
+
+	searchReq := httptest.NewRequest(http.MethodGet, "/api/v1/knowledge/search?q=C++技术栈", nil)
+	searchReq.Header.Set("X-User-Id", "100")
+	searchReq.Header.Set("X-User-Role", "1")
+	searchW := httptest.NewRecorder()
+	r.ServeHTTP(searchW, searchReq)
+
+	require.Equal(t, http.StatusOK, searchW.Code)
+	require.Contains(t, searchW.Body.String(), "C++学习路线")
+}
+
 func buildDocx(text string) ([]byte, error) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)

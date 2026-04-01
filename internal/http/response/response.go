@@ -9,4 +9,3 @@ func OK(c *gin.Context, data any) {
 func Error(c *gin.Context, status int, msg string) {
 	c.JSON(status, gin.H{"error": msg})
 }
-
