@@ -19,6 +19,7 @@ import (
 	"gorm.io/gorm"
 	"manage/internal/http/router"
 	"manage/internal/model"
+	"manage/internal/testutil"
 )
 
 func setupKnowledgeTestRouter(t *testing.T) (*gorm.DB, http.Handler) {
@@ -44,10 +45,8 @@ func TestKnowledgeSearchByStudent(t *testing.T) {
 	_, r := setupKnowledgeTestRouter(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/knowledge/search?q=休学", nil)
-	req.Header.Set("X-User-Id", "100")
-	req.Header.Set("X-User-Role", "1")
-	req.Header.Set("X-User-Class-Id", "1")
-	req.Header.Set("X-User-Grade", "2023")
+	token := testutil.GenerateTestToken(100, 1, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -64,8 +63,8 @@ func TestKnowledgeSearchRejectsEmptyQuery(t *testing.T) {
 	_, r := setupKnowledgeTestRouter(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/knowledge/search", nil)
-	req.Header.Set("X-User-Id", "100")
-	req.Header.Set("X-User-Role", "1")
+	token := testutil.GenerateTestToken(100, 1, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -77,8 +76,8 @@ func TestAdminKnowledgeListForbiddenForStudent(t *testing.T) {
 	_, r := setupKnowledgeTestRouter(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/knowledge", nil)
-	req.Header.Set("X-User-Id", "100")
-	req.Header.Set("X-User-Role", "1")
+	token := testutil.GenerateTestToken(100, 1, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -91,8 +90,8 @@ func TestAdminKnowledgeCreateAndPatchWriteAdminLog(t *testing.T) {
 	createBody := []byte(`{"question":"复学流程是什么","answer":"提交复学申请并等待审批","keywords":["复学","审批"],"attachments":[{"title":"复学指引","url":"https://example.com/back"}]}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/admin/knowledge", bytes.NewReader(createBody))
 	createReq.Header.Set("Content-Type", "application/json")
-	createReq.Header.Set("X-User-Id", "200")
-	createReq.Header.Set("X-User-Role", "2")
+	token := testutil.GenerateTestToken(200, 2, 0, "")
+	createReq.Header.Set("Authorization", "Bearer "+token)
 	wCreate := httptest.NewRecorder()
 	r.ServeHTTP(wCreate, createReq)
 
@@ -105,8 +104,7 @@ func TestAdminKnowledgeCreateAndPatchWriteAdminLog(t *testing.T) {
 	patchBody := []byte(`{"answer":"先提交复学材料，再由学院审批"}`)
 	patchReq := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/knowledge/"+strconv.Itoa(int(created.ID)), bytes.NewReader(patchBody))
 	patchReq.Header.Set("Content-Type", "application/json")
-	patchReq.Header.Set("X-User-Id", "200")
-	patchReq.Header.Set("X-User-Role", "2")
+	patchReq.Header.Set("Authorization", "Bearer "+token)
 	wPatch := httptest.NewRecorder()
 	r.ServeHTTP(wPatch, patchReq)
 
@@ -128,8 +126,8 @@ func TestAdminKnowledgePatchReturns404WhenNotFound(t *testing.T) {
 	patchBody := []byte(`{"answer":"不存在记录"}`)
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/knowledge/99999", bytes.NewReader(patchBody))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-User-Id", "200")
-	req.Header.Set("X-User-Role", "2")
+	token := testutil.GenerateTestToken(200, 2, 0, "")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -148,8 +146,8 @@ func TestAdminKnowledgeListIncludesTotal(t *testing.T) {
 	}).Error)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/knowledge?limit=1&offset=0", nil)
-	req.Header.Set("X-User-Id", "200")
-	req.Header.Set("X-User-Role", "2")
+	token := testutil.GenerateTestToken(200, 2, 0, "")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -171,8 +169,8 @@ func TestAdminKnowledgeGetByID(t *testing.T) {
 	require.NoError(t, db.Where("question = ?", "休学申请怎么办理").First(&existing).Error)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/knowledge/"+strconv.Itoa(int(existing.ID)), nil)
-	req.Header.Set("X-User-Id", "200")
-	req.Header.Set("X-User-Role", "2")
+	token := testutil.GenerateTestToken(200, 2, 0, "")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -184,8 +182,8 @@ func TestAdminKnowledgeGetByIDNotFound(t *testing.T) {
 	_, r := setupKnowledgeTestRouter(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/knowledge/99999", nil)
-	req.Header.Set("X-User-Id", "200")
-	req.Header.Set("X-User-Role", "2")
+	token := testutil.GenerateTestToken(200, 2, 0, "")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -199,8 +197,8 @@ func TestAdminKnowledgeDeleteByID(t *testing.T) {
 	require.NoError(t, db.Where("question = ?", "休学申请怎么办理").First(&existing).Error)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/knowledge/"+strconv.Itoa(int(existing.ID)), nil)
-	req.Header.Set("X-User-Id", "200")
-	req.Header.Set("X-User-Role", "2")
+	token := testutil.GenerateTestToken(200, 2, 0, "")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -221,8 +219,8 @@ func TestAdminKnowledgeDeleteByIDNotFound(t *testing.T) {
 	_, r := setupKnowledgeTestRouter(t)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/knowledge/99999", nil)
-	req.Header.Set("X-User-Id", "200")
-	req.Header.Set("X-User-Role", "2")
+	token := testutil.GenerateTestToken(200, 2, 0, "")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -251,8 +249,8 @@ func TestAdminKnowledgeImportWithFiles(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/knowledge/import", &body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("X-User-Id", "200")
-	req.Header.Set("X-User-Role", "2")
+	token := testutil.GenerateTestToken(200, 2, 0, "")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -298,15 +296,15 @@ func TestKnowledgeSearchHitsImportedDocContent(t *testing.T) {
 
 	importReq := httptest.NewRequest(http.MethodPost, "/api/v1/admin/knowledge/import", &body)
 	importReq.Header.Set("Content-Type", writer.FormDataContentType())
-	importReq.Header.Set("X-User-Id", "200")
-	importReq.Header.Set("X-User-Role", "2")
+	importToken := testutil.GenerateTestToken(200, 2, 0, "")
+	importReq.Header.Set("Authorization", "Bearer "+importToken)
 	importW := httptest.NewRecorder()
 	r.ServeHTTP(importW, importReq)
 	require.Equal(t, http.StatusOK, importW.Code)
 
 	searchReq := httptest.NewRequest(http.MethodGet, "/api/v1/knowledge/search?q=综测排名证明", nil)
-	searchReq.Header.Set("X-User-Id", "100")
-	searchReq.Header.Set("X-User-Role", "1")
+	searchToken := testutil.GenerateTestToken(100, 1, 1, "2023")
+	searchReq.Header.Set("Authorization", "Bearer "+searchToken)
 	searchW := httptest.NewRecorder()
 	r.ServeHTTP(searchW, searchReq)
 
@@ -339,15 +337,15 @@ func TestKnowledgeSearchHitsImportedPDFContent(t *testing.T) {
 
 	importReq := httptest.NewRequest(http.MethodPost, "/api/v1/admin/knowledge/import", &body)
 	importReq.Header.Set("Content-Type", writer.FormDataContentType())
-	importReq.Header.Set("X-User-Id", "200")
-	importReq.Header.Set("X-User-Role", "2")
+	importToken := testutil.GenerateTestToken(200, 2, 0, "")
+	importReq.Header.Set("Authorization", "Bearer "+importToken)
 	importW := httptest.NewRecorder()
 	r.ServeHTTP(importW, importReq)
 	require.Equal(t, http.StatusOK, importW.Code)
 
 	searchReq := httptest.NewRequest(http.MethodGet, "/api/v1/knowledge/search?q=C++技术栈", nil)
-	searchReq.Header.Set("X-User-Id", "100")
-	searchReq.Header.Set("X-User-Role", "1")
+	searchToken := testutil.GenerateTestToken(100, 1, 1, "2023")
+	searchReq.Header.Set("Authorization", "Bearer "+searchToken)
 	searchW := httptest.NewRecorder()
 	r.ServeHTTP(searchW, searchReq)
 

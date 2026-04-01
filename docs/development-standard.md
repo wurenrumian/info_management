@@ -119,17 +119,22 @@ HTTP 状态码：
 
 ## 5. 身份与权限规范
 
-身份来源（Phase 1/2）：Header 注入
-- `X-User-Id`
-- `X-User-Role`
-- `X-User-Class-Id`
-- `X-User-Grade`
+身份来源（当前）：JWT token（`Authorization: Bearer <token>`）
+
+Token 由 `POST /api/v1/wechat/login` 返回，包含 `sub`（user ID）、`role`、`class_id`、`grade`。
+
+环境变量：
+- `JWT_SECRET` — JWT 签名密钥（生产环境必须设置）
+- `WECHAT_APP_ID` / `WECHAT_APP_SECRET` — 微信小程序配置
 
 权限流程（必须）：
-1. `auth.GetActor(c)`
-2. `authz.Authorize(actor.Role, action)`
-3. `authz.BuildScope(actor)`
-4. repo 查询/更新应用 scope
+1. JWT 中间件解析 token 并注入 `auth.Actor`
+2. `auth.GetActor(c)`
+3. `authz.Authorize(actor.Role, action)`
+4. `authz.BuildScope(actor)`
+5. repo 查询/更新应用 scope
+
+测试中生成 token 使用 `testutil.GenerateTestToken(userID, role, classID, grade)`。
 
 ---
 

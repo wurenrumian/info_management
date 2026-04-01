@@ -5,6 +5,8 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8080}"
+JWT_SECRET="${JWT_SECRET:-dev-secret-change-in-production}"
+
 ADMIN_USER_ID="${ADMIN_USER_ID:-200}"
 ADMIN_ROLE="${ADMIN_ROLE:-2}"
 ADMIN_CLASS_ID="${ADMIN_CLASS_ID:-1}"
@@ -18,6 +20,24 @@ STUDENT_GRADE="${STUDENT_GRADE:-2023}"
 DOCX_FILE="${DOCX_FILE:-/tmp/knowledge_demo.docx}"
 XLSX_FILE="${XLSX_FILE:-/tmp/knowledge_demo.xlsx}"
 PDF_FILE="${PDF_FILE:-/tmp/knowledge_demo.pdf}"
+
+generate_token() {
+  local user_id="$1"
+  local role="$2"
+  local class_id="$3"
+  local grade="$4"
+
+  local header
+  header=$(echo -n '{"alg":"HS256","typ":"JWT"}' | openssl base64 | tr -d '\n' | tr '+/' '-_' | tr -d '=')
+  local payload
+  payload=$(echo -n "{\"sub\":$user_id,\"role\":$role,\"class_id\":$class_id,\"grade\":\"$grade\"}" | openssl base64 | tr -d '\n' | tr '+/' '-_' | tr -d '=')
+  local signature
+  signature=$(echo -n "$header.$payload" | openssl dgst -sha256 -hmac "$JWT_SECRET" -binary | openssl base64 | tr -d '\n' | tr '+/' '-_' | tr -d '=')
+  echo "$header.$payload.$signature"
+}
+
+ADMIN_TOKEN=$(generate_token "$ADMIN_USER_ID" "$ADMIN_ROLE" "$ADMIN_CLASS_ID" "$ADMIN_GRADE")
+STUDENT_TOKEN=$(generate_token "$STUDENT_USER_ID" "$STUDENT_ROLE" "$STUDENT_CLASS_ID" "$STUDENT_GRADE")
 
 assert_contains() {
   local haystack="$1"
@@ -66,10 +86,7 @@ echo
 
 echo "== 2) Admin Import Knowledge (multipart) =="
 import_resp="$(curl -s -X POST "$BASE_URL/api/v1/admin/knowledge/import" \
-  -H "X-User-Id: $ADMIN_USER_ID" \
-  -H "X-User-Role: $ADMIN_ROLE" \
-  -H "X-User-Class-Id: $ADMIN_CLASS_ID" \
-  -H "X-User-Grade: $ADMIN_GRADE" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
   -F "question=奖学金申请材料有哪些" \
   -F "answer=请按附件准备并提交" \
   -F "keywords=奖学金,申请,材料" \
@@ -91,10 +108,7 @@ echo
 if [[ "$SKIP_PDF" -eq 0 ]]; then
   echo "== 2b) Admin Import PDF Knowledge =="
   pdf_import_resp="$(curl -s -X POST "$BASE_URL/api/v1/admin/knowledge/import" \
-    -H "X-User-Id: $ADMIN_USER_ID" \
-    -H "X-User-Role: $ADMIN_ROLE" \
-    -H "X-User-Class-Id: $ADMIN_CLASS_ID" \
-    -H "X-User-Grade: $ADMIN_GRADE" \
+    -H "Authorization: Bearer $ADMIN_TOKEN" \
     -F "question=C++学习路线指南" \
     -F "answer=请参考附件PDF文档" \
     -F "keywords=C++,后端,学习路线" \
@@ -111,10 +125,7 @@ fi
 
 echo "== 3) Student Search by Normal Keywords =="
 search_keyword_resp="$(curl -s "$BASE_URL/api/v1/knowledge/search?q=奖学金申请" \
-  -H "X-User-Id: $STUDENT_USER_ID" \
-  -H "X-User-Role: $STUDENT_ROLE" \
-  -H "X-User-Class-Id: $STUDENT_CLASS_ID" \
-  -H "X-User-Grade: $STUDENT_GRADE")"
+  -H "Authorization: Bearer $STUDENT_TOKEN")"
 echo "$search_keyword_resp"
 assert_contains "$search_keyword_resp" "\"total\":" "student search has total"
 assert_contains "$search_keyword_resp" "奖学金申请材料有哪些" "student search keyword hit"
@@ -122,10 +133,7 @@ echo
 
 echo "== 4) Student Search by Doc Content Keywords =="
 search_doc_resp="$(curl -s "$BASE_URL/api/v1/knowledge/search?q=综测排名证明" \
-  -H "X-User-Id: $STUDENT_USER_ID" \
-  -H "X-User-Role: $STUDENT_ROLE" \
-  -H "X-User-Class-Id: $STUDENT_CLASS_ID" \
-  -H "X-User-Grade: $STUDENT_GRADE")"
+  -H "Authorization: Bearer $STUDENT_TOKEN")"
 echo "$search_doc_resp"
 assert_contains "$search_doc_resp" "\"total\":" "doc search has total"
 assert_contains "$search_doc_resp" "奖学金申请材料有哪些" "student search doc content hit"
@@ -134,23 +142,7 @@ echo
 if [[ "$SKIP_PDF" -eq 0 ]]; then
   echo "== 4b) Student Search by PDF Content Keywords =="
   search_pdf_resp="$(curl -s "$BASE_URL/api/v1/knowledge/search?q=C++技术栈" \
-    -H "X-User-Id: $STUDENT_USER_ID" \
-    -H "X-User-Role: $STUDENT_ROLE" \
-    -H "X-User-Class-Id: $STUDENT_CLASS_ID" \
-    -H "X-User-Grade: $STUDENT_GRADE")"
-  echo "$search_pdf_resp"
-  assert_contains "$search_pdf_resp" "\"total\":" "pdf search has total"
-  assert_contains "$search_pdf_resp" "C++学习路线指南" "student search pdf content hit"
-  echo
-fi
-
-if [[ "$SKIP_PDF" -eq 0 ]]; then
-  echo "== 4b) Student Search by PDF Content Keywords =="
-  search_pdf_resp="$(curl -s "$BASE_URL/api/v1/knowledge/search?q=C++技术栈" \
-    -H "X-User-Id: $STUDENT_USER_ID" \
-    -H "X-User-Role: $STUDENT_ROLE" \
-    -H "X-User-Class-Id: $STUDENT_CLASS_ID" \
-    -H "X-User-Grade: $STUDENT_GRADE")"
+    -H "Authorization: Bearer $STUDENT_TOKEN")"
   echo "$search_pdf_resp"
   assert_contains "$search_pdf_resp" "\"total\":" "pdf search has total"
   assert_contains "$search_pdf_resp" "C++学习路线指南" "student search pdf content hit"
@@ -159,10 +151,7 @@ fi
 
 echo "== 5) Admin List Knowledge =="
 admin_list_resp="$(curl -s "$BASE_URL/api/v1/admin/knowledge?query=奖学金&limit=20&offset=0" \
-  -H "X-User-Id: $ADMIN_USER_ID" \
-  -H "X-User-Role: $ADMIN_ROLE" \
-  -H "X-User-Class-Id: $ADMIN_CLASS_ID" \
-  -H "X-User-Grade: $ADMIN_GRADE")"
+  -H "Authorization: Bearer $ADMIN_TOKEN")"
 echo "$admin_list_resp"
 assert_contains "$admin_list_resp" "\"total\":" "admin list has total"
 assert_contains "$admin_list_resp" "奖学金申请材料有哪些" "admin list query hit"
@@ -170,10 +159,7 @@ echo
 
 echo "== 6) Admin Get Knowledge By ID =="
 admin_get_resp="$(curl -s "$BASE_URL/api/v1/admin/knowledge/$import_id" \
-  -H "X-User-Id: $ADMIN_USER_ID" \
-  -H "X-User-Role: $ADMIN_ROLE" \
-  -H "X-User-Class-Id: $ADMIN_CLASS_ID" \
-  -H "X-User-Grade: $ADMIN_GRADE")"
+  -H "Authorization: Bearer $ADMIN_TOKEN")"
 echo "$admin_get_resp"
 assert_contains_any "$admin_get_resp" "admin get by id" "\"id\":$import_id" "\"ID\":$import_id"
 echo
@@ -181,10 +167,7 @@ echo
 echo "== 7) Admin Patch Knowledge =="
 admin_patch_resp="$(curl -s -X PATCH "$BASE_URL/api/v1/admin/knowledge/$import_id" \
   -H "Content-Type: application/json" \
-  -H "X-User-Id: $ADMIN_USER_ID" \
-  -H "X-User-Role: $ADMIN_ROLE" \
-  -H "X-User-Class-Id: $ADMIN_CLASS_ID" \
-  -H "X-User-Grade: $ADMIN_GRADE" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
   -d '{"answer":"请按最新附件材料提交"}')"
 echo "$admin_patch_resp"
 assert_contains "$admin_patch_resp" "\"updated\":true" "admin patch success"
@@ -193,10 +176,7 @@ echo
 echo "== 8) Admin Patch Non-Existing Knowledge =="
 admin_patch_404_resp="$(curl -s -X PATCH "$BASE_URL/api/v1/admin/knowledge/99999999" \
   -H "Content-Type: application/json" \
-  -H "X-User-Id: $ADMIN_USER_ID" \
-  -H "X-User-Role: $ADMIN_ROLE" \
-  -H "X-User-Class-Id: $ADMIN_CLASS_ID" \
-  -H "X-User-Grade: $ADMIN_GRADE" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
   -d '{"answer":"not found"}')"
 echo "$admin_patch_404_resp"
 assert_contains "$admin_patch_404_resp" "knowledge not found" "admin patch 404"
@@ -204,20 +184,14 @@ echo
 
 echo "== 9) Admin Delete Knowledge =="
 admin_delete_resp="$(curl -s -X DELETE "$BASE_URL/api/v1/admin/knowledge/$import_id" \
-  -H "X-User-Id: $ADMIN_USER_ID" \
-  -H "X-User-Role: $ADMIN_ROLE" \
-  -H "X-User-Class-Id: $ADMIN_CLASS_ID" \
-  -H "X-User-Grade: $ADMIN_GRADE")"
+  -H "Authorization: Bearer $ADMIN_TOKEN")"
 echo "$admin_delete_resp"
 assert_contains "$admin_delete_resp" "\"deleted\":true" "admin delete success"
 echo
 
 echo "== 10) Admin Get Deleted Knowledge =="
 admin_get_deleted_resp="$(curl -s "$BASE_URL/api/v1/admin/knowledge/$import_id" \
-  -H "X-User-Id: $ADMIN_USER_ID" \
-  -H "X-User-Role: $ADMIN_ROLE" \
-  -H "X-User-Class-Id: $ADMIN_CLASS_ID" \
-  -H "X-User-Grade: $ADMIN_GRADE")"
+  -H "Authorization: Bearer $ADMIN_TOKEN")"
 echo "$admin_get_deleted_resp"
 assert_contains "$admin_get_deleted_resp" "knowledge not found" "admin get deleted item 404"
 echo
@@ -225,10 +199,7 @@ echo
 if [[ "$SKIP_PDF" -eq 0 && -n "${pdf_import_id:-}" ]]; then
   echo "== 10b) Admin Delete PDF Knowledge =="
   admin_delete_pdf_resp="$(curl -s -X DELETE "$BASE_URL/api/v1/admin/knowledge/$pdf_import_id" \
-    -H "X-User-Id: $ADMIN_USER_ID" \
-    -H "X-User-Role: $ADMIN_ROLE" \
-    -H "X-User-Class-Id: $ADMIN_CLASS_ID" \
-    -H "X-User-Grade: $ADMIN_GRADE")"
+    -H "Authorization: Bearer $ADMIN_TOKEN")"
   echo "$admin_delete_pdf_resp"
   assert_contains "$admin_delete_pdf_resp" "\"deleted\":true" "admin delete pdf success"
   echo

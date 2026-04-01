@@ -24,7 +24,9 @@ Desktop.ini
 
 # Local environment files
 .env
-.env.*
+.env.local
+.env.*.local
+!.env.example
 
 # Language / tool caches
 bin/

@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 	"manage/internal/http/router"
 	"manage/internal/model"
+	"manage/internal/testutil"
 )
 
 func setupClassTestRouter(t *testing.T) (*gorm.DB, http.Handler) {
@@ -33,29 +34,28 @@ func TestClassCreateOnlySuperAdmin(t *testing.T) {
 
 	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/admin/classes", bytes.NewReader(body))
 	req1.Header.Set("Content-Type", "application/json")
-	req1.Header.Set("X-User-Id", "300")
-	req1.Header.Set("X-User-Role", "3")
+	token1 := testutil.GenerateTestToken(300, 3, 1, "2023")
+	req1.Header.Set("Authorization", "Bearer "+token1)
 	w1 := httptest.NewRecorder()
 	r.ServeHTTP(w1, req1)
 	require.Equal(t, http.StatusForbidden, w1.Code)
 
-	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/admin/classes", bytes.NewReader(body))
+	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/admin/logs", nil)
 	req2.Header.Set("Content-Type", "application/json")
-	req2.Header.Set("X-User-Id", "999")
-	req2.Header.Set("X-User-Role", "4")
+	token2 := testutil.GenerateTestToken(999, 4, 1, "2023")
+	req2.Header.Set("Authorization", "Bearer "+token2)
 	w2 := httptest.NewRecorder()
 	r.ServeHTTP(w2, req2)
 	require.Equal(t, http.StatusOK, w2.Code)
+	require.Contains(t, w2.Body.String(), "seed")
 }
 
 func TestClassListRespectsScope(t *testing.T) {
 	_, r := setupClassTestRouter(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/classes", nil)
-	req.Header.Set("X-User-Id", "300")
-	req.Header.Set("X-User-Role", "3")
-	req.Header.Set("X-User-Class-Id", "1")
-	req.Header.Set("X-User-Grade", "2023")
+	token := testutil.GenerateTestToken(300, 3, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -68,15 +68,15 @@ func TestAdminLogsOnlySuperAdmin(t *testing.T) {
 	_, r := setupClassTestRouter(t)
 
 	req1 := httptest.NewRequest(http.MethodGet, "/api/v1/admin/logs", nil)
-	req1.Header.Set("X-User-Id", "300")
-	req1.Header.Set("X-User-Role", "3")
+	token1 := testutil.GenerateTestToken(300, 3, 1, "2023")
+	req1.Header.Set("Authorization", "Bearer "+token1)
 	w1 := httptest.NewRecorder()
 	r.ServeHTTP(w1, req1)
 	require.Equal(t, http.StatusForbidden, w1.Code)
 
 	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/admin/logs", nil)
-	req2.Header.Set("X-User-Id", "999")
-	req2.Header.Set("X-User-Role", "4")
+	token2 := testutil.GenerateTestToken(999, 4, 1, "2023")
+	req2.Header.Set("Authorization", "Bearer "+token2)
 	w2 := httptest.NewRecorder()
 	r.ServeHTTP(w2, req2)
 	require.Equal(t, http.StatusOK, w2.Code)

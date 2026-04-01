@@ -18,6 +18,8 @@
 - 微信登录绑定流程（`openid` 字段保留但不启用绑定）
 - 审批、党团流程、知识库、通知推送、文档库等业务模块
 
+> **更新**：微信 OpenID 绑定与 JWT 认证已在后续阶段实现，见 `docs/superpowers/specs/2026-04-01-wechat-openid-binding-design.md`。
+
 ## 2. 设计目标与约束
 
 目标：
@@ -38,6 +40,8 @@
 - `internal/service`：角色权限判断、数据范围策略
 - `internal/http`：路由、Handler、中间件
 - `internal/auth`：开发期身份注入（请求头模拟用户），后续替换为 JWT
+
+> **更新**：当前已替换为 JWT 认证中间件，见 `internal/http/middleware/auth.go`。
 
 核心策略：
 1. 先做功能权限判断（能否调用接口）。
@@ -137,8 +141,8 @@
 - 不实现微信登录绑定、审批流、知识库、信息发布、通知、文档上传
 
 兼容性要求：
-- 保留 `openid` 字段，后续可直接加入绑定流程，不破坏已定义用户结构。
-- 所有后续模块调用权限系统时只需声明 `action` 并复用 scope。
+- `openid` 字段已启用绑定流程，JWT 认证已实现
+- 所有后续模块调用权限系统时只需声明 `action` 并复用 scope
 
 ## 9. 第一阶段验收标准
 

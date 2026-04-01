@@ -6,10 +6,7 @@
 
 ## Required Headers
 
-- `X-User-Id`
-- `X-User-Role`
-- `X-User-Class-Id` (按角色 scope 使用)
-- `X-User-Grade` (按角色 scope 使用)
+- `Authorization: Bearer <token>`（JWT token，由微信登录接口返回）
 
 ## Student Endpoint
 

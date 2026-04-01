@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 	"manage/internal/http/router"
 	"manage/internal/model"
+	"manage/internal/testutil"
 )
 
 func setupContractRouter(t *testing.T) http.Handler {
@@ -36,7 +37,8 @@ func TestPhase1Contract_RoleMatrix(t *testing.T) {
 		method  string
 		path    string
 		body    []byte
-		headers map[string]string
+		token   string
+		content bool
 		want    int
 	}
 
@@ -44,50 +46,54 @@ func TestPhase1Contract_RoleMatrix(t *testing.T) {
 		{
 			name:   "student can get me",
 			method: http.MethodGet, path: "/api/v1/me", want: http.StatusOK,
-			headers: map[string]string{"X-User-Id": "100", "X-User-Role": "1", "X-User-Class-Id": "1", "X-User-Grade": "2023"},
+			token: testutil.GenerateTestToken(100, 1, 1, "2023"),
 		},
 		{
 			name:   "student cannot list users",
 			method: http.MethodGet, path: "/api/v1/admin/users", want: http.StatusForbidden,
-			headers: map[string]string{"X-User-Id": "100", "X-User-Role": "1", "X-User-Class-Id": "1", "X-User-Grade": "2023"},
+			token: testutil.GenerateTestToken(100, 1, 1, "2023"),
 		},
 		{
 			name:   "cadre can list users",
 			method: http.MethodGet, path: "/api/v1/admin/users", want: http.StatusOK,
-			headers: map[string]string{"X-User-Id": "200", "X-User-Role": "2", "X-User-Class-Id": "1", "X-User-Grade": "2023"},
+			token: testutil.GenerateTestToken(200, 2, 1, "2023"),
 		},
 		{
 			name:   "cadre cannot patch users",
 			method: http.MethodPatch, path: "/api/v1/admin/users/100", body: []byte(`{"name":"x"}`), want: http.StatusForbidden,
-			headers: map[string]string{"X-User-Id": "200", "X-User-Role": "2", "X-User-Class-Id": "1", "X-User-Grade": "2023", "Content-Type": "application/json"},
+			token:   testutil.GenerateTestToken(200, 2, 1, "2023"),
+			content: true,
 		},
 		{
 			name:   "teacher can list classes",
 			method: http.MethodGet, path: "/api/v1/admin/classes", want: http.StatusOK,
-			headers: map[string]string{"X-User-Id": "300", "X-User-Role": "3", "X-User-Class-Id": "1", "X-User-Grade": "2023"},
+			token: testutil.GenerateTestToken(300, 3, 1, "2023"),
 		},
 		{
 			name:   "teacher cannot create classes",
 			method: http.MethodPost, path: "/api/v1/admin/classes", body: []byte(`{"class_name":"N1","grade":"2024","major":"CS"}`), want: http.StatusForbidden,
-			headers: map[string]string{"X-User-Id": "300", "X-User-Role": "3", "X-User-Class-Id": "1", "X-User-Grade": "2023", "Content-Type": "application/json"},
+			token:   testutil.GenerateTestToken(300, 3, 1, "2023"),
+			content: true,
 		},
 		{
 			name:   "superadmin can patch users",
 			method: http.MethodPatch, path: "/api/v1/admin/users/100", body: []byte(`{"name":"updated"}`), want: http.StatusOK,
-			headers: map[string]string{"X-User-Id": "999", "X-User-Role": "4", "X-User-Class-Id": "1", "X-User-Grade": "2023", "Content-Type": "application/json"},
+			token:   testutil.GenerateTestToken(999, 4, 1, "2023"),
+			content: true,
 		},
 		{
 			name:   "superadmin can list logs",
 			method: http.MethodGet, path: "/api/v1/admin/logs", want: http.StatusOK,
-			headers: map[string]string{"X-User-Id": "999", "X-User-Role": "4", "X-User-Class-Id": "1", "X-User-Grade": "2023"},
+			token: testutil.GenerateTestToken(999, 4, 1, "2023"),
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, bytes.NewReader(tc.body))
-			for k, v := range tc.headers {
-				req.Header.Set(k, v)
+			req.Header.Set("Authorization", "Bearer "+tc.token)
+			if tc.content {
+				req.Header.Set("Content-Type", "application/json")
 			}
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, req)

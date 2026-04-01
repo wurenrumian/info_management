@@ -11,6 +11,7 @@ type User struct {
 	StudentID    string         `gorm:"size:20;uniqueIndex;not null"`
 	Name         string         `gorm:"size:50;not null"`
 	OpenID       *string        `gorm:"size:100"`
+	PasswordHash *string        `gorm:"size:255"`
 	Role         int            `gorm:"not null;index"`
 	ClassID      uint           `gorm:"index"`
 	Grade        string         `gorm:"size:10;index"`
