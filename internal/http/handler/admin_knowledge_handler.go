@@ -361,7 +361,7 @@ func (h *AdminKnowledgeHandler) saveUploadedFiles(c *gin.Context) ([]map[string]
 			"title": file.Filename,
 			"url":   "/uploads/documents/" + result.FilePath,
 		})
-		if text := upload.ExtractTextFromFile(filepath.Join(h.uploadDir, result.FilePath)); text != "" {
+		if text := knowledgeSvc.ExtractTextFromFile(filepath.Join(h.uploadDir, result.FilePath)); text != "" {
 			textParts = append(textParts, text)
 		}
 	}

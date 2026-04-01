@@ -1,4 +1,4 @@
-package upload
+package knowledge
 
 import (
 	"archive/zip"
