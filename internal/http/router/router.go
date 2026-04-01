@@ -15,11 +15,19 @@ func New(db *gorm.DB) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.GET("/healthz", handler.Health)
-	uploadDir := strings.TrimSpace(os.Getenv("KNOWLEDGE_UPLOAD_DIR"))
+
+	// Unified static file serving
+	uploadDir := strings.TrimSpace(os.Getenv("DOCUMENT_UPLOAD_DIR"))
 	if uploadDir == "" {
-		uploadDir = "./data/uploads/knowledge"
+		uploadDir = "./data/uploads/documents"
 	}
-	r.Static("/uploads/knowledge", uploadDir)
+	r.Static("/uploads/documents", uploadDir)
+
+	// Backward compat: knowledge uploads
+	knowledgeDir := strings.TrimSpace(os.Getenv("KNOWLEDGE_UPLOAD_DIR"))
+	if knowledgeDir != "" {
+		r.Static("/uploads/knowledge", knowledgeDir)
+	}
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
@@ -42,9 +50,17 @@ func New(db *gorm.DB) *gin.Engine {
 	adminClassHandler := handler.NewAdminClassHandler(db)
 	adminLogHandler := handler.NewAdminLogHandler(db)
 	adminKnowledgeHandler := handler.NewAdminKnowledgeHandler(db)
+	fileHandler := handler.NewFileHandler(db)
 
 	api.GET("/me", meHandler.GetMe)
 	api.GET("/knowledge/search", knowledgeHandler.Search)
+
+	// File APIs
+	api.POST("/files/upload", fileHandler.Upload)
+	api.GET("/files", fileHandler.List)
+	api.GET("/files/:id", fileHandler.Get)
+	api.GET("/files/:id/download", fileHandler.Download)
+	api.DELETE("/files/:id", fileHandler.Delete)
 
 	admin := api.Group("/admin")
 	admin.GET("/users", adminUserHandler.ListUsers)

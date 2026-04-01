@@ -4,12 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"mime/multipart"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/datatypes"
@@ -21,12 +19,14 @@ import (
 	"manage/internal/repo"
 	"manage/internal/service/authz"
 	knowledgeSvc "manage/internal/service/knowledge"
+	"manage/internal/service/upload"
 )
 
 // AdminKnowledgeHandler handles knowledge management APIs.
 type AdminKnowledgeHandler struct {
 	svc       *knowledgeSvc.Service
 	logRepo   *repo.AdminLogRepo
+	uploadSvc *upload.Service
 	uploadDir string
 }
 
@@ -34,11 +34,15 @@ type AdminKnowledgeHandler struct {
 func NewAdminKnowledgeHandler(db *gorm.DB) *AdminKnowledgeHandler {
 	uploadDir := os.Getenv("KNOWLEDGE_UPLOAD_DIR")
 	if strings.TrimSpace(uploadDir) == "" {
-		uploadDir = "./data/uploads/knowledge"
+		uploadDir = os.Getenv("DOCUMENT_UPLOAD_DIR")
+		if uploadDir == "" {
+			uploadDir = "./data/uploads/documents"
+		}
 	}
 	return &AdminKnowledgeHandler{
 		svc:       knowledgeSvc.NewService(db),
 		logRepo:   repo.NewAdminLogRepo(db),
+		uploadSvc: upload.NewService(uploadDir),
 		uploadDir: uploadDir,
 	}
 }
@@ -346,44 +350,20 @@ func (h *AdminKnowledgeHandler) saveUploadedFiles(c *gin.Context) ([]map[string]
 		return nil, "", fmt.Errorf("missing files")
 	}
 
-	if err := os.MkdirAll(h.uploadDir, 0o755); err != nil {
-		return nil, "", fmt.Errorf("prepare upload dir failed")
-	}
-
 	attachments := make([]map[string]string, 0, len(files))
 	textParts := make([]string, 0, len(files))
 	for _, file := range files {
-		if !allowedAttachment(file) {
-			return nil, "", fmt.Errorf("unsupported file type")
-		}
-		savedName := uniqueFileName(file.Filename)
-		savedPath := filepath.Join(h.uploadDir, savedName)
-		if err := c.SaveUploadedFile(file, savedPath); err != nil {
-			return nil, "", fmt.Errorf("save file failed")
+		result, err := h.uploadSvc.SaveFile(file)
+		if err != nil {
+			return nil, "", err
 		}
 		attachments = append(attachments, map[string]string{
 			"title": file.Filename,
-			"url":   "/uploads/knowledge/" + savedName,
+			"url":   "/uploads/documents/" + result.FilePath,
 		})
-		if text := knowledgeSvc.ExtractTextFromFile(savedPath); text != "" {
+		if text := knowledgeSvc.ExtractTextFromFile(filepath.Join(h.uploadDir, result.FilePath)); text != "" {
 			textParts = append(textParts, text)
 		}
 	}
 	return attachments, strings.Join(textParts, " "), nil
-}
-
-func allowedAttachment(file *multipart.FileHeader) bool {
-	ext := strings.ToLower(filepath.Ext(file.Filename))
-	switch ext {
-	case ".pdf", ".doc", ".docx", ".xls", ".xlsx":
-		return true
-	default:
-		return false
-	}
-}
-
-func uniqueFileName(origin string) string {
-	base := filepath.Base(origin)
-	base = strings.ReplaceAll(base, " ", "_")
-	return fmt.Sprintf("%d_%s", time.Now().UnixNano(), base)
 }
