@@ -95,4 +95,3 @@ func TestPhase1Contract_RoleMatrix(t *testing.T) {
 		})
 	}
 }
-

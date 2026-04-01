@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"io"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -28,8 +29,11 @@ func ExtractTextFromFile(path string) string {
 		}
 		return text
 	case ".pdf":
-		// PDF正文抽取后续可接入专用解析库；当前先存附件元信息。
-		return ""
+		text, err := extractPDF(path)
+		if err != nil {
+			return ""
+		}
+		return text
 	default:
 		return ""
 	}
@@ -210,4 +214,18 @@ func normalizeText(s string) string {
 		return ""
 	}
 	return multiSpace.ReplaceAllString(s, " ")
+}
+
+func extractPDF(path string) (string, error) {
+	cmd := exec.Command("pdftotext", "-layout", "-q", path, "-")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+
+	result := normalizeText(string(out))
+	if result == "" {
+		return "", nil
+	}
+	return result, nil
 }

@@ -39,4 +39,3 @@ func ParseUintHeader(c *gin.Context, key string) (uint, bool) {
 	}
 	return uint(v), true
 }
-

@@ -4,9 +4,9 @@
 
 **Goal:** 为 knowledge 模块扩展 PDF 正文提取能力，支持 PDF 附件内容参与全文检索。
 
-**Architecture:** 在 `extractor.go` 新增 `extractPDF` 函数，使用 pdfcpu 逐页提取文本；不修改现有 handler/API 契约，仅增强 `content_text` 生成逻辑。
+**Architecture:** 在 `extractor.go` 新增 `extractPDF` 函数，使用 `pdftotext` CLI（通过 Go `exec.Command` 调用）提取文本；不修改现有 handler/API 契约，仅增强 `content_text` 生成逻辑。
 
-**Tech Stack:** Go, pdfcpu v0.9.1, GORM, Gin, SQLite (tests), Kingbase (integration)
+**Tech Stack:** Go, poppler-utils (pdftotext), GORM, Gin, SQLite (tests), Kingbase (integration)
 
 ---
 
@@ -27,17 +27,24 @@ scripts/dev/
 ### Task 1: 依赖与测试数据准备
 
 **Files:**
-- Modify: `go.mod`
+- Modify: `Dockerfile` (添加 poppler-utils)
 - Create: `internal/service/knowledge/testdata/sample.pdf`
 - Create: `internal/service/knowledge/testdata/encrypted.pdf`
 
-- [ ] **Step 1: 添加 pdfcpu 依赖**
+- [ ] **Step 1: 安装系统依赖 pdftotext**
 
-```bash
-go get github.com/pdfcpu/pdfcpu@v0.9.1
+在 Dockerfile 中添加（或确认已存在）：
+```dockerfile
+RUN apt-get update && apt-get install -y poppler-utils
 ```
 
-验证：`go mod tidy` 应无错误
+本地开发环境：
+```bash
+# Debian/Ubuntu
+sudo apt-get install -y poppler-utils
+# 验证
+pdftotext -v
+```
 
 - [ ] **Step 2: 生成测试用 PDF 文件**
 
@@ -53,7 +60,7 @@ mkdir -p internal/service/knowledge/testdata
 # 文件名: internal/service/knowledge/testdata/encrypted.pdf
 ```
 
-**Verification:** 两个文件存在且可读
+**Verification:** 两个文件存在且可读，`pdftotext sample.pdf -` 能输出文本
 
 ---
 
@@ -66,7 +73,7 @@ mkdir -p internal/service/knowledge/testdata
 
 在 extractor.go 顶部新增：
 ```go
-import "github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
+import "os/exec"
 ```
 
 - [ ] **Step 2: 添加 PDF case**
@@ -86,32 +93,24 @@ case ".pdf":
 在文件末尾添加：
 ```go
 func extractPDF(path string) (string, error) {
-    ctx, err := pdfcpu.ReadContextFile(path)
+    cmd := exec.Command("pdftotext", "-layout", "-q", path, "-")
+    out, err := cmd.Output()
     if err != nil {
         return "", err
     }
     
-    var buf strings.Builder
-    pageCount := ctx.PageCount
-    
-    for i := 1; i <= pageCount; i++ {
-        txt, err := ctx.ExtractText(i)
-        if err != nil {
-            continue  // 跳过失败页面
-        }
-        if strings.TrimSpace(txt) != "" {
-            buf.WriteString(txt)
-            buf.WriteByte(' ')
-        }
-    }
-    
-    result := normalizeText(buf.String())
+    result := normalizeText(string(out))
     if result == "" {
         return "", nil
     }
     return result, nil
 }
 ```
+
+**参数说明**：
+- `-layout`：保持原始排版布局
+- `-q`：静默模式，不输出错误信息到 stderr
+- `-`：输出到 stdout（而非文件）
 
 ---
 
@@ -291,14 +290,14 @@ go fmt ./...
 - [ ] **Step 3: 提交变更**
 
 ```bash
-git add go.mod go.sum
+git add Dockerfile
 git add internal/service/knowledge/extractor.go
 git add internal/service/knowledge/extractor_pdf_test.go
 git add internal/service/knowledge/testdata/
 git add internal/http/handler/knowledge_handler_test.go
 git add docs/api/phase2-knowledge-api.md
 git add scripts/dev/knowledge_repo_kingbase_integration.sh
-git commit -m "feat(knowledge): support PDF text extraction for search indexing"
+git commit -m "feat(knowledge): support PDF text extraction via pdftotext"
 ```
 
 ---

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+
+# 个人集成测试使用，如需本地运行可能要更改一些参数
+
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8080}"
@@ -14,6 +17,7 @@ STUDENT_GRADE="${STUDENT_GRADE:-2023}"
 
 DOCX_FILE="${DOCX_FILE:-/tmp/knowledge_demo.docx}"
 XLSX_FILE="${XLSX_FILE:-/tmp/knowledge_demo.xlsx}"
+PDF_FILE="${PDF_FILE:-/tmp/knowledge_demo.pdf}"
 
 assert_contains() {
   local haystack="$1"
@@ -47,9 +51,11 @@ if [[ ! -f "$DOCX_FILE" ]]; then
   echo "DOCX_FILE not found: $DOCX_FILE"
   exit 1
 fi
-if [[ ! -f "$XLSX_FILE" ]]; then
-  echo "XLSX_FILE not found: $XLSX_FILE"
-  exit 1
+if [[ ! -f "$PDF_FILE" ]]; then
+  echo "[WARN] PDF_FILE not found: $PDF_FILE, skipping PDF tests"
+  SKIP_PDF=1
+else
+  SKIP_PDF=0
 fi
 
 echo "== 1) Health Check =="
@@ -82,6 +88,27 @@ fi
 echo "Imported knowledge id: $import_id"
 echo
 
+if [[ "$SKIP_PDF" -eq 0 ]]; then
+  echo "== 2b) Admin Import PDF Knowledge =="
+  pdf_import_resp="$(curl -s -X POST "$BASE_URL/api/v1/admin/knowledge/import" \
+    -H "X-User-Id: $ADMIN_USER_ID" \
+    -H "X-User-Role: $ADMIN_ROLE" \
+    -H "X-User-Class-Id: $ADMIN_CLASS_ID" \
+    -H "X-User-Grade: $ADMIN_GRADE" \
+    -F "question=C++学习路线指南" \
+    -F "answer=请参考附件PDF文档" \
+    -F "keywords=C++,后端,学习路线" \
+    -F "files=@$PDF_FILE")"
+  echo "$pdf_import_resp"
+  assert_contains "$pdf_import_resp" "C++学习路线指南" "pdf import knowledge"
+  pdf_import_id="$(sed -n 's/.*"id":[[:space:]]*\([0-9][0-9]*\).*/\1/p' <<<"$pdf_import_resp" | head -n1)"
+  if [[ -z "$pdf_import_id" ]]; then
+    pdf_import_id="$(sed -n 's/.*"ID":[[:space:]]*\([0-9][0-9]*\).*/\1/p' <<<"$pdf_import_resp" | head -n1)"
+  fi
+  echo "Imported PDF knowledge id: $pdf_import_id"
+  echo
+fi
+
 echo "== 3) Student Search by Normal Keywords =="
 search_keyword_resp="$(curl -s "$BASE_URL/api/v1/knowledge/search?q=奖学金申请" \
   -H "X-User-Id: $STUDENT_USER_ID" \
@@ -103,6 +130,32 @@ echo "$search_doc_resp"
 assert_contains "$search_doc_resp" "\"total\":" "doc search has total"
 assert_contains "$search_doc_resp" "奖学金申请材料有哪些" "student search doc content hit"
 echo
+
+if [[ "$SKIP_PDF" -eq 0 ]]; then
+  echo "== 4b) Student Search by PDF Content Keywords =="
+  search_pdf_resp="$(curl -s "$BASE_URL/api/v1/knowledge/search?q=C++技术栈" \
+    -H "X-User-Id: $STUDENT_USER_ID" \
+    -H "X-User-Role: $STUDENT_ROLE" \
+    -H "X-User-Class-Id: $STUDENT_CLASS_ID" \
+    -H "X-User-Grade: $STUDENT_GRADE")"
+  echo "$search_pdf_resp"
+  assert_contains "$search_pdf_resp" "\"total\":" "pdf search has total"
+  assert_contains "$search_pdf_resp" "C++学习路线指南" "student search pdf content hit"
+  echo
+fi
+
+if [[ "$SKIP_PDF" -eq 0 ]]; then
+  echo "== 4b) Student Search by PDF Content Keywords =="
+  search_pdf_resp="$(curl -s "$BASE_URL/api/v1/knowledge/search?q=C++技术栈" \
+    -H "X-User-Id: $STUDENT_USER_ID" \
+    -H "X-User-Role: $STUDENT_ROLE" \
+    -H "X-User-Class-Id: $STUDENT_CLASS_ID" \
+    -H "X-User-Grade: $STUDENT_GRADE")"
+  echo "$search_pdf_resp"
+  assert_contains "$search_pdf_resp" "\"total\":" "pdf search has total"
+  assert_contains "$search_pdf_resp" "C++学习路线指南" "student search pdf content hit"
+  echo
+fi
 
 echo "== 5) Admin List Knowledge =="
 admin_list_resp="$(curl -s "$BASE_URL/api/v1/admin/knowledge?query=奖学金&limit=20&offset=0" \
@@ -168,5 +221,17 @@ admin_get_deleted_resp="$(curl -s "$BASE_URL/api/v1/admin/knowledge/$import_id" 
 echo "$admin_get_deleted_resp"
 assert_contains "$admin_get_deleted_resp" "knowledge not found" "admin get deleted item 404"
 echo
+
+if [[ "$SKIP_PDF" -eq 0 && -n "${pdf_import_id:-}" ]]; then
+  echo "== 10b) Admin Delete PDF Knowledge =="
+  admin_delete_pdf_resp="$(curl -s -X DELETE "$BASE_URL/api/v1/admin/knowledge/$pdf_import_id" \
+    -H "X-User-Id: $ADMIN_USER_ID" \
+    -H "X-User-Role: $ADMIN_ROLE" \
+    -H "X-User-Class-Id: $ADMIN_CLASS_ID" \
+    -H "X-User-Grade: $ADMIN_GRADE")"
+  echo "$admin_delete_pdf_resp"
+  assert_contains "$admin_delete_pdf_resp" "\"deleted\":true" "admin delete pdf success"
+  echo
+fi
 
 echo "Done."

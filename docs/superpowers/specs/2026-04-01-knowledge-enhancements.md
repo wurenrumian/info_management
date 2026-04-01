@@ -30,23 +30,30 @@
 
 | 选项 | 协议 | 理由 |
 |------|------|------|
-| **pdfcpu** | MIT | ✅ 纯Go实现，无C依赖<br>✅ 支持文本提取（`ExtractText`）<br>✅ 轻量（~2MB）<br>✅ 社区活跃 |
+| **pdftotext** (poppler-utils) | GPL | ✅ 提取效果最好，中文支持优秀<br>✅ 公文/政策文件提取准确率高<br>✅ 通过 Go exec.Command 包装，无 C 依赖<br>⚠️ 需系统安装 poppler-utils |
+| pdfcpu | MIT | ⚠️ 纯Go但对复杂公文PDF提取效果一般 |
 | unidoc/unipdf | 商业 | ❌ 需要许可证 |
 | rsc.io/pdf | BSD | ⚠️ 功能极简，无中文优化 |
-| pdftotext | GPL | ❌ 依赖系统poppler，部署复杂 |
 
-**决策**：采用 `github.com/pdfcpu/pdfcpu/pkg/pdfcpu`
+**决策**：采用 `pdftotext` CLI（poppler-utils），通过 Go `exec.Command` 调用
 
 ---
 
 ## 4. 实现方案
 
-### 4.1 依赖添加
+### 4.1 依赖安装
 
-`go.mod` 新增：
-```go
-require github.com/pdfcpu/pdfcpu v0.9.1
+系统依赖（部署时确保安装）：
+```bash
+# Debian/Ubuntu
+apt-get install -y poppler-utils
+# RHEL/CentOS
+yum install -y poppler-utils
+# Alpine
+apk add poppler-utils
 ```
+
+Go 代码无需额外依赖，使用标准库 `os/exec`。
 
 ### 4.2 代码变更
 
@@ -55,7 +62,7 @@ require github.com/pdfcpu/pdfcpu v0.9.1
 ```go
 import (
     // ... 现有导入
-    "github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
+    "os/exec"
 )
 
 func ExtractTextFromFile(path string) string {
@@ -78,28 +85,14 @@ func ExtractTextFromFile(path string) string {
 }
 
 func extractPDF(path string) (string, error) {
-    // pdfcpu 文本提取
-    ctx, err := pdfcpu.ReadContextFile(path)
+    // 使用 pdftotext CLI 提取
+    cmd := exec.Command("pdftotext", "-layout", "-q", path, "-")
+    out, err := cmd.Output()
     if err != nil {
         return "", err
     }
     
-    var buf strings.Builder
-    pageCount := ctx.PageCount
-    
-    // 逐页提取
-    for i := 1; i <= pageCount; i++ {
-        txt, err := ctx.ExtractText(i)
-        if err != nil {
-            continue  // 单页失败不影响其他页
-        }
-        if strings.TrimSpace(txt) != "" {
-            buf.WriteString(txt)
-            buf.WriteByte(' ')
-        }
-    }
-    
-    result := normalizeText(buf.String())
+    result := normalizeText(string(out))
     if result == "" {
         return "", nil  // 无文本内容（可能是扫描件）
     }
@@ -109,10 +102,10 @@ func extractPDF(path string) (string, error) {
 
 ### 4.3 注意事项
 
-- **性能**：`ReadContextFile` 会解析整个PDF，但导入是低频操作，可接受
+- **性能**：`pdftotext` 是 C++ 实现，提取速度快，适合公文类 PDF
 - **扫描件**：无文本层的扫描PDF将返回空，不影响附件保存
 - **密码保护**：忽略加密PDF（返回空），不中断流程
-- **内存**：逐页处理，避免大文件OOM
+- **部署**：需确保运行环境安装 `poppler-utils`（Dockerfile 中已包含）
 
 ---
 
@@ -150,11 +143,12 @@ func TestKnowledgeSearchHitsImportedPDFContent(t *testing.T) {
 }
 ```
 
-### 5.3 金仓集成测试
+### 5.3 API 脚本测试
 
-更新 `scripts/dev/knowledge_repo_kingbase_integration.sh`：
+更新 `scripts/dev/knowledge_api_curl.sh`：
 - 增加 PDF 导入用例
-- 验证 PDF 抽取的 `content_text` 能通过 FTS 检索
+- 验证 PDF 抽取的 `content_text` 能通过全文检索命中
+- 脚本支持 PDF 文件缺失时跳过 PDF 测试（不中断整体流程）
 
 ---
 
@@ -183,10 +177,10 @@ PDF 正文抽取说明：
 
 | 风险 | 影响 | 缓解措施 |
 |------|------|----------|
-| pdfcpu API 变更 | 编译失败 | 锁定版本 v0.9.1 |
-| 大PDF内存峰值 | OOM | 逐页处理，限制上传大小（已有） |
+| pdftotext 未安装 | 运行时错误 | 启动时检测，Dockerfile 预装 |
+| 大PDF内存峰值 | OOM | 限制上传大小（已有） |
 | 扫描PDF无文本 | 功能未生效 | 文档明确说明，不阻塞导入 |
-| 中文编码问题 | 乱码 | pdfcpu 支持 UTF-8，需测试验证 |
+| 中文编码问题 | 乱码 | pdftotext 原生支持 UTF-8，中文公文提取效果好 |
 
 ---
 
@@ -196,7 +190,7 @@ PDF 正文抽取说明：
 2. ✅ 测试：`extractor_pdf_test.go` 覆盖正常/异常场景
 3. ✅ 集成：知识库导入PDF后，`content_text` 非空，搜索命中
 4. ✅ 向后兼容：原有docx/xlsx功能不受影响
-5. 📜 脚本：金仓集成测试包含PDF用例
+5. 📜 脚本：`knowledge_api_curl.sh` 包含 PDF 导入和搜索用例
 
 ---
 
@@ -205,7 +199,8 @@ PDF 正文抽取说明：
 - `internal/service/knowledge/extractor.go`（主修改）
 - `internal/service/knowledge/extractor_pdf_test.go`（新建）
 - `docs/api/phase2-knowledge-api.md`（更新）
-- `scripts/dev/knowledge_repo_kingbase_integration.sh`（更新）
+- `scripts/dev/make_demo_knowledge_files.sh`（更新：生成PDF）
+- `scripts/dev/knowledge_api_curl.sh`（更新：PDF导入/搜索用例）
 
 ---
 

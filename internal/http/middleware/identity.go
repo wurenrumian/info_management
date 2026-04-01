@@ -36,4 +36,3 @@ func IdentityFromHeaders() gin.HandlerFunc {
 		c.Next()
 	}
 }
-
