@@ -16,4 +16,8 @@ const (
 	ActionClassesCreate   = "classes:create"
 	ActionClassesPatch    = "classes:patch"
 	ActionAdminLogsList   = "admin_logs:list"
+	ActionFilesUpload     = "files:upload"
+	ActionFilesGet        = "files:get"
+	ActionFilesList       = "files:list"
+	ActionFilesDelete     = "files:delete"
 )
