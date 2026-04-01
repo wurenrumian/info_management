@@ -10,6 +10,20 @@
 
 ## 2. 并行模块清单（All Phases）
 
+### Phase 2-0：文档库 / 文件基础设施（Document Library）
+
+- 通用文件上传/下载 API（30MB 限制，本地存储）
+- `documents` 表与元数据管理
+- 共享 `upload` service（从知识库抽离）
+- PDF/DOCX/XLSX 文本提取器复用
+- 知识库 handler 重构为使用共享 service
+
+当前状态：spec 已完成（`docs/superpowers/specs/2026-04-01-document-library-design.md`），待 implementation plan
+
+建议边界：
+- 当前阶段只做最小基础设施（CRUD API），不做分类/搜索/前端
+- 其他模块通过 `POST /api/v1/files/upload` 获取 file_id，在自身表中引用
+
 ### Phase 2-A：党团流程（PartyFlow）
 
 - 学生查看个人党团阶段、历史节点、下一步提示
@@ -51,14 +65,16 @@
 ## 3. 并行顺序与依赖
 
 并行原则：
-- 4 个模块都复用 Phase 1 权限/scope，不互相等待业务实现
+- Phase 2-0（文档库）先行开发，为 A/B/C/D 提供文件基础设施
+- 4 个业务模块都复用 Phase 1 权限/scope + Phase 2-0 文件服务，不互相等待业务实现
 - 先统一接口风格、错误码、审计字段，再并行写代码
 
 建议节奏：
 1. 第 0 周：统一开发规范与目录约定（本文档 + development-standard）
-2. 第 1-2 周：四模块并行开发核心 API（各自最小闭环）
-3. 第 3 周：合同测试与联调
-4. 第 4 周：小程序/网站前端对接
+2. 第 0.5 周：Phase 2-0 文档库开发（文件基础设施）
+3. 第 1-2 周：四模块并行开发核心 API（各自最小闭环）
+4. 第 3 周：合同测试与联调
+5. 第 4 周：小程序/网站前端对接
 
 ## 4. 模块负责人建议（可替换）
 

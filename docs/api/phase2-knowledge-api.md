@@ -185,7 +185,7 @@
 - `xls`
 - `xlsx`
 
-成功后会自动生成附件链接，格式为：`/uploads/knowledge/<filename>`
+成功后会自动生成附件链接，格式为：`/uploads/documents/<relative_path>`
 并在服务端尝试抽取文档正文写入 `content_text` 用于检索：
 - 已支持正文抽取：`docx`、`xlsx`、`pdf`
 - 当前不保证正文抽取：`doc`、`xls`（仍可作为附件导入与展示）

@@ -51,6 +51,7 @@ manage/
 │   ├── repo/                       # 数据访问
 │   ├── service/                    # 业务规则（按模块分目录）
 │   │   ├── authz/
+│   │   ├── upload/                 # 共享文件服务（Phase 2-0）
 │   │   ├── partyflow/
 │   │   ├── knowledge/
 │   │   ├── approvals/
@@ -76,6 +77,7 @@ manage/
 ## 3. Phase 2 并行模块与代码归属
 
 当前并行模块：
+- `upload`（共享文件服务，Phase 2-0 先行）
 - `partyflow`
 - `knowledge`
 - `approvals`
@@ -94,6 +96,14 @@ manage/
 - `internal/service/partyflow/service.go`
 - `internal/http/handler/party_progress_handler.go`
 - `docs/api/phase2-partyflow-api.md`
+
+### 共享服务约定
+
+`internal/service/upload/` 为共享文件服务，所有模块需要文件上传/下载能力时：
+- 调用 `POST /api/v1/files/upload` API 上传，获得 `file_id`
+- 在自身表中以 `jsonb` 字段存储引用（如 `{"file_id": 1, "title": "xxx"}`）
+- 禁止各模块自行实现文件保存逻辑
+- 禁止绕过 `upload` service 直接操作文件系统
 
 ---
 
