@@ -6,32 +6,30 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 	"manage/internal/auth"
 	"manage/internal/http/middleware"
+	"manage/internal/testutil"
 )
 
-func TestIdentityMiddlewareInjectsActor(t *testing.T) {
+func TestJWTMiddlewareInjectsActor(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.Use(middleware.IdentityFromHeaders())
+	r.Use(middleware.JWTAuth("test-secret"))
 	r.GET("/probe", func(c *gin.Context) {
 		a, ok := auth.GetActor(c)
-		if !ok {
-			t.Fatal("expected actor in context")
-		}
+		require.True(t, ok, "expected actor in context")
 		c.JSON(http.StatusOK, gin.H{"user_id": a.UserID, "role": a.Role})
 	})
 
+	t.Setenv("JWT_SECRET", "test-secret")
+	token := testutil.GenerateTestToken(12, 3, 0, "")
 	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
-	req.Header.Set("X-User-Id", "12")
-	req.Header.Set("X-User-Role", "3")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
-	}
-	if got := w.Body.String(); got != "{\"role\":3,\"user_id\":12}" {
-		t.Fatalf("unexpected body: %s", got)
-	}
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), `"user_id":12`)
+	require.Contains(t, w.Body.String(), `"role":3`)
 }

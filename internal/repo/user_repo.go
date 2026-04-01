@@ -58,3 +58,25 @@ func (r *UserRepo) GetByIDInScope(scope authz.Scope, id uint) (*model.User, erro
 func (r *UserRepo) UpdateByID(id uint, updates map[string]any) error {
 	return r.db.Model(&model.User{}).Where("id = ?", id).Updates(updates).Error
 }
+
+func (r *UserRepo) GetByOpenID(openID string) (*model.User, error) {
+	var user model.User
+	err := r.db.Where("openid = ?", openID).Preload("Class").First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *UserRepo) GetByStudentID(studentID string) (*model.User, error) {
+	var user model.User
+	err := r.db.Where("student_id = ?", studentID).Preload("Class").First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *UserRepo) UpdatePasswordHash(userID uint, hash string) error {
+	return r.db.Model(&model.User{}).Where("id = ?", userID).Update("password_hash", hash).Error
+}

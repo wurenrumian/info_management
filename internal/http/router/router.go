@@ -21,8 +21,20 @@ func New(db *gorm.DB) *gin.Engine {
 	}
 	r.Static("/uploads/knowledge", uploadDir)
 
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = "dev-secret-change-in-production"
+	}
+	appID := os.Getenv("WECHAT_APP_ID")
+	appSecret := os.Getenv("WECHAT_APP_SECRET")
+
 	api := r.Group("/api/v1")
-	api.Use(middleware.IdentityFromHeaders())
+
+	wechatHandler := handler.NewWechatHandler(db, appID, appSecret, jwtSecret)
+	api.POST("/wechat/login", wechatHandler.Login)
+	api.POST("/wechat/bind", middleware.OptionalJWTAuth(jwtSecret), wechatHandler.Bind)
+
+	api.Use(middleware.JWTAuth(jwtSecret))
 
 	meHandler := handler.NewMeHandler(db)
 	knowledgeHandler := handler.NewKnowledgeHandler(db)

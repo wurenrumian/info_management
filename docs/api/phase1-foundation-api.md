@@ -4,12 +4,15 @@
 
 `/api/v1`
 
-## Required Headers (Phase 1)
+## Authentication
 
-- `X-User-Id`
-- `X-User-Role`
-- `X-User-Class-Id` (required for cadre/teacher scope behavior)
-- `X-User-Grade` (required for teacher grade scope behavior)
+All endpoints (except `/wechat/login` and `/wechat/bind`) require a JWT token in the `Authorization` header:
+
+```
+Authorization: Bearer <token>
+```
+
+Token payload contains: `sub` (user ID), `role`, `class_id`, `grade`.
 
 ## Student Endpoint
 
@@ -36,9 +39,5 @@
 
 ```http
 GET /api/v1/admin/users HTTP/1.1
-X-User-Id: 300
-X-User-Role: 3
-X-User-Class-Id: 1
-X-User-Grade: 2023
+Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
 ```
-

@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 	"manage/internal/http/router"
 	"manage/internal/model"
+	"manage/internal/testutil"
 )
 
 func setupTestRouter(t *testing.T) *gorm.DB {
@@ -32,10 +33,8 @@ func TestGetMeOnlyReturnsSelf(t *testing.T) {
 	r := router.New(db)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
-	req.Header.Set("X-User-Id", "100")
-	req.Header.Set("X-User-Role", "1")
-	req.Header.Set("X-User-Class-Id", "1")
-	req.Header.Set("X-User-Grade", "2023")
+	token := testutil.GenerateTestToken(100, 1, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -49,10 +48,8 @@ func TestAdminUsersListRespectsScope(t *testing.T) {
 	r := router.New(db)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/users", nil)
-	req.Header.Set("X-User-Id", "200")
-	req.Header.Set("X-User-Role", "2")
-	req.Header.Set("X-User-Class-Id", "1")
-	req.Header.Set("X-User-Grade", "2023")
+	token := testutil.GenerateTestToken(200, 2, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -68,10 +65,8 @@ func TestPatchUserWritesAdminLog(t *testing.T) {
 	body := []byte(`{"name":"new-name"}`)
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/users/100", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-User-Id", "999")
-	req.Header.Set("X-User-Role", "4")
-	req.Header.Set("X-User-Class-Id", "1")
-	req.Header.Set("X-User-Grade", "2023")
+	token := testutil.GenerateTestToken(999, 4, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
