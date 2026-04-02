@@ -16,7 +16,7 @@ func NewGormUserRepo(db *gorm.DB) *GormUserRepo {
 // Returns empty string (no error) if the user exists but has no OpenID.
 func (r *GormUserRepo) GetUserOpenID(userID uint) (string, error) {
 	var openID *string
-	err := r.db.Table("users").Select("openid").Where("id = ?", userID).Scan(&openID).Error
+	err := r.db.Table("users").Select("open_id").Where("id = ?", userID).Scan(&openID).Error
 	if err != nil {
 		return "", err
 	}

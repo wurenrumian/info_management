@@ -72,7 +72,7 @@ func (r *UserRepo) Create(user *model.User) error {
 
 func (r *UserRepo) GetByOpenID(openID string) (*model.User, error) {
 	var user model.User
-	err := r.db.Where("openid = ?", openID).Preload("Class").First(&user).Error
+	err := r.db.Where("open_id = ?", openID).Preload("Class").First(&user).Error
 	if err != nil {
 		return nil, err
 	}
