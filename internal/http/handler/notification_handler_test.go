@@ -64,7 +64,7 @@ func TestCreateTemplate(t *testing.T) {
 
 	handler.CreateTemplate(c)
 
-	require.Equal(t, http.StatusCreated, w.Code)
+	require.Equal(t, http.StatusOK, w.Code)
 }
 
 func TestCreateTemplateMissingField(t *testing.T) {

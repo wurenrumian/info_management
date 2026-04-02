@@ -1,10 +1,12 @@
 package handler_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"manage/internal/http/router"
 )
 
@@ -14,10 +16,10 @@ func TestHealthz(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
-	}
-	if got := w.Body.String(); got != "{\"status\":\"ok\"}" {
-		t.Fatalf("expected body %q, got %q", "{\"status\":\"ok\"}", got)
-	}
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	require.Equal(t, "ok", data["status"])
 }

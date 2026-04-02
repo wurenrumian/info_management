@@ -4,15 +4,14 @@ import (
 	"encoding/xml"
 	"io"
 	"log"
-	"net/http"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"manage/internal/auth"
 	"manage/internal/http/response"
 	"manage/internal/model"
-
-	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // SubscribeHandler handles subscription reporting and WeChat event callbacks.
@@ -35,18 +34,18 @@ type subscribeReportReq struct {
 func (h *SubscribeHandler) ReportSubscribe(c *gin.Context) {
 	actor, ok := auth.GetActor(c)
 	if !ok {
-		response.Error(c, http.StatusUnauthorized, "unauthorized")
+		response.Error(c, 401, "unauthorized")
 		return
 	}
 
 	var req subscribeReportReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid request")
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
 	if req.Status != "accept" && req.Status != "reject" {
-		response.Error(c, http.StatusBadRequest, "status must be accept or reject")
+		response.Error(c, 400, "status must be accept or reject")
 		return
 	}
 
@@ -70,12 +69,12 @@ func (h *SubscribeHandler) ReportSubscribe(c *gin.Context) {
 	if err == gorm.ErrRecordNotFound {
 		sub.SubscribedAt = now
 		if err := h.db.Create(&sub).Error; err != nil {
-			response.Error(c, http.StatusInternalServerError, "failed to record subscription")
+			response.Error(c, 500, "failed to record subscription")
 			return
 		}
 	} else {
 		if err := h.db.Model(&model.UserSubscribe{}).Where("id = ?", existing.ID).Updates(sub).Error; err != nil {
-			response.Error(c, http.StatusInternalServerError, "failed to update subscription")
+			response.Error(c, 500, "failed to update subscription")
 			return
 		}
 	}
@@ -107,13 +106,13 @@ func (h *SubscribeHandler) WechatCallback(c *gin.Context) {
 	body, err := io.ReadAll(c.Request.Body)
 	defer c.Request.Body.Close()
 	if err != nil {
-		c.String(http.StatusBadRequest, "fail")
+		c.String(400, "fail")
 		return
 	}
 
 	var event wechatEventXML
 	if err := xml.Unmarshal(body, &event); err != nil {
-		c.String(http.StatusOK, "success")
+		c.String(200, "success")
 		return
 	}
 
@@ -128,7 +127,7 @@ func (h *SubscribeHandler) WechatCallback(c *gin.Context) {
 		}
 	}
 
-	c.String(http.StatusOK, "success")
+	c.String(200, "success")
 }
 
 func (h *SubscribeHandler) updateSubscribeByOpenID(openID, templateID, statusStr string) {

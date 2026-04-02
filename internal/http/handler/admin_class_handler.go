@@ -92,7 +92,7 @@ func (h *AdminClassHandler) CreateClass(c *gin.Context) {
 		response.Error(c, 500, "create class failed")
 		return
 	}
-	_ = h.logRepo.Create(model.AdminLog{AdminID: actor.UserID, Action: "classes.create", TargetType: "class", TargetID: item.ID, IPAddress: c.ClientIP()})
+	_ = h.logRepo.Create(&model.AdminLog{AdminID: actor.UserID, Action: "classes.create", TargetType: "class", TargetID: item.ID, IPAddress: c.ClientIP()})
 	response.OK(c, item)
 }
 
@@ -140,6 +140,6 @@ func (h *AdminClassHandler) PatchClass(c *gin.Context) {
 		response.Error(c, 500, "update class failed")
 		return
 	}
-	_ = h.logRepo.Create(model.AdminLog{AdminID: actor.UserID, Action: "classes.patch", TargetType: "class", TargetID: uint(id), IPAddress: c.ClientIP()})
+	_ = h.logRepo.Create(&model.AdminLog{AdminID: actor.UserID, Action: "classes.patch", TargetType: "class", TargetID: uint(id), IPAddress: c.ClientIP()})
 	response.OK(c, gin.H{"updated": true})
 }

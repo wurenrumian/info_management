@@ -124,6 +124,6 @@ func (h *AdminUserHandler) PatchUser(c *gin.Context) {
 		response.Error(c, 500, "update user failed")
 		return
 	}
-	_ = h.logRepo.Create(model.AdminLog{AdminID: actor.UserID, Action: "users.patch", TargetType: "user", TargetID: uint(id), IPAddress: c.ClientIP()})
+	_ = h.logRepo.Create(&model.AdminLog{AdminID: actor.UserID, Action: "users.patch", TargetType: "user", TargetID: uint(id), IPAddress: c.ClientIP()})
 	response.OK(c, gin.H{"updated": true})
 }

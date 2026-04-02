@@ -118,12 +118,14 @@ func TestFileListIncludesTotal(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	var payload map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &payload))
+	var dataWrap map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(payload["data"], &dataWrap))
 	var total int64
-	require.NoError(t, json.Unmarshal(payload["total"], &total))
+	require.NoError(t, json.Unmarshal(dataWrap["total"], &total))
 	require.Equal(t, int64(2), total)
 
 	var data []map[string]any
-	require.NoError(t, json.Unmarshal(payload["data"], &data))
+	require.NoError(t, json.Unmarshal(dataWrap["data"], &data))
 	require.Len(t, data, 1)
 }
 

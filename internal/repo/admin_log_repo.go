@@ -14,8 +14,8 @@ func NewAdminLogRepo(db *gorm.DB) *AdminLogRepo {
 	return &AdminLogRepo{db: db}
 }
 
-func (r *AdminLogRepo) Create(log model.AdminLog) error {
-	return r.db.Create(&log).Error
+func (r *AdminLogRepo) Create(log *model.AdminLog) error {
+	return r.db.Create(log).Error
 }
 
 func (r *AdminLogRepo) List(limit, offset int) ([]model.AdminLog, error) {

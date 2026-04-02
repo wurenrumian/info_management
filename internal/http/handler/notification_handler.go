@@ -1,16 +1,15 @@
 package handler
 
 import (
-	"net/http"
 	"strconv"
+
+	"github.com/gin-gonic/gin"
 
 	"manage/internal/auth"
 	"manage/internal/http/response"
 	"manage/internal/model"
 	"manage/internal/service/authz"
 	"manage/internal/service/notification"
-
-	"github.com/gin-gonic/gin"
 )
 
 // NotificationHandler handles HTTP requests for notification template and log management.
@@ -26,8 +25,12 @@ func NewNotificationHandler(svc *notification.Service) *NotificationHandler {
 // CreateTemplate handles POST /admin/notification/templates.
 func (h *NotificationHandler) CreateTemplate(c *gin.Context) {
 	actor, ok := auth.GetActor(c)
-	if !ok || !authz.Authorize(actor.Role, authz.ActionNotifTplCreate) {
-		response.Error(c, http.StatusForbidden, "forbidden")
+	if !ok {
+		response.Error(c, 401, "unauthorized")
+		return
+	}
+	if !authz.Authorize(actor.Role, authz.ActionNotifTplCreate) {
+		response.Error(c, 403, "forbidden")
 		return
 	}
 
@@ -38,7 +41,7 @@ func (h *NotificationHandler) CreateTemplate(c *gin.Context) {
 		Fields           string `json:"fields"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -50,25 +53,29 @@ func (h *NotificationHandler) CreateTemplate(c *gin.Context) {
 	}
 
 	if err := h.svc.CreateTemplate(tmpl); err != nil {
-		response.Error(c, http.StatusInternalServerError, err.Error())
+		response.Error(c, 500, "create template failed")
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": tmpl})
+	response.OK(c, tmpl)
 }
 
 // GetTemplate handles GET /admin/notification/templates/:code.
 func (h *NotificationHandler) GetTemplate(c *gin.Context) {
 	actor, ok := auth.GetActor(c)
-	if !ok || !authz.Authorize(actor.Role, authz.ActionNotifTplGet) {
-		response.Error(c, http.StatusForbidden, "forbidden")
+	if !ok {
+		response.Error(c, 401, "unauthorized")
+		return
+	}
+	if !authz.Authorize(actor.Role, authz.ActionNotifTplGet) {
+		response.Error(c, 403, "forbidden")
 		return
 	}
 
 	code := c.Param("code")
 	tmpl, err := h.svc.GetTemplate(code)
 	if err != nil {
-		response.Error(c, http.StatusNotFound, "template not found")
+		response.Error(c, 404, "template not found")
 		return
 	}
 	response.OK(c, tmpl)
@@ -77,8 +84,12 @@ func (h *NotificationHandler) GetTemplate(c *gin.Context) {
 // ListLogs handles GET /admin/notification/logs.
 func (h *NotificationHandler) ListLogs(c *gin.Context) {
 	actor, ok := auth.GetActor(c)
-	if !ok || !authz.Authorize(actor.Role, authz.ActionNotifLogsList) {
-		response.Error(c, http.StatusForbidden, "forbidden")
+	if !ok {
+		response.Error(c, 401, "unauthorized")
+		return
+	}
+	if !authz.Authorize(actor.Role, authz.ActionNotifLogsList) {
+		response.Error(c, 403, "forbidden")
 		return
 	}
 
@@ -112,7 +123,7 @@ func (h *NotificationHandler) ListLogs(c *gin.Context) {
 
 	logs, total, err := h.svc.GetLogs(filter)
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, err.Error())
+		response.Error(c, 500, "list logs failed")
 		return
 	}
 

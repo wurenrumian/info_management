@@ -38,8 +38,11 @@ func (h *KnowledgeHandler) Search(c *gin.Context) {
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 	items, total, err := h.svc.Search(c.Query("q"), limit, offset)
 	if err != nil {
-		response.Error(c, 400, err.Error())
+		response.Error(c, 500, "search knowledge failed")
 		return
 	}
-	c.JSON(200, gin.H{"data": items, "total": total})
+	response.OK(c, gin.H{
+		"data":  items,
+		"total": total,
+	})
 }

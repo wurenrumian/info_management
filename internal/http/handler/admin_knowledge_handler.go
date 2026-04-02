@@ -80,7 +80,10 @@ func (h *AdminKnowledgeHandler) ListKnowledge(c *gin.Context) {
 		response.Error(c, 500, "list knowledge failed")
 		return
 	}
-	c.JSON(200, gin.H{"data": items, "total": total})
+	response.OK(c, gin.H{
+		"data":  items,
+		"total": total,
+	})
 }
 
 // GetKnowledge gets one knowledge item by id.
@@ -152,11 +155,17 @@ func (h *AdminKnowledgeHandler) CreateKnowledge(c *gin.Context) {
 	}
 
 	if err := h.svc.Create(&item); err != nil {
-		response.Error(c, 400, err.Error())
+		response.Error(c, 500, "create knowledge failed")
 		return
 	}
 
-	_ = h.logRepo.Create(model.AdminLog{AdminID: actor.UserID, Action: "knowledge.create", TargetType: "knowledge", TargetID: item.ID, IPAddress: c.ClientIP()})
+	_ = h.logRepo.Create(&model.AdminLog{
+		AdminID:    actor.UserID,
+		Action:     "knowledge.create",
+		TargetType: "knowledge",
+		TargetID:   item.ID,
+		IPAddress:  c.ClientIP(),
+	})
 	response.OK(c, item)
 }
 
@@ -222,7 +231,7 @@ func (h *AdminKnowledgeHandler) PatchKnowledge(c *gin.Context) {
 		return
 	}
 
-	_ = h.logRepo.Create(model.AdminLog{AdminID: actor.UserID, Action: "knowledge.patch", TargetType: "knowledge", TargetID: uint(id64), IPAddress: c.ClientIP()})
+	_ = h.logRepo.Create(&model.AdminLog{AdminID: actor.UserID, Action: "knowledge.patch", TargetType: "knowledge", TargetID: uint(id64), IPAddress: c.ClientIP()})
 	response.OK(c, gin.H{"updated": true})
 }
 
@@ -247,7 +256,7 @@ func (h *AdminKnowledgeHandler) ImportKnowledge(c *gin.Context) {
 
 	attachments, contentText, err := h.saveUploadedFiles(c)
 	if err != nil {
-		response.Error(c, 400, err.Error())
+		response.Error(c, 500, "upload failed")
 		return
 	}
 
@@ -273,11 +282,11 @@ func (h *AdminKnowledgeHandler) ImportKnowledge(c *gin.Context) {
 		UpdatedBy:   actor.UserID,
 	}
 	if err := h.svc.Create(&item); err != nil {
-		response.Error(c, 400, err.Error())
+		response.Error(c, 500, "create knowledge failed")
 		return
 	}
 
-	_ = h.logRepo.Create(model.AdminLog{
+	_ = h.logRepo.Create(&model.AdminLog{
 		AdminID:    actor.UserID,
 		Action:     "knowledge.import",
 		TargetType: "knowledge",
@@ -314,7 +323,7 @@ func (h *AdminKnowledgeHandler) DeleteKnowledge(c *gin.Context) {
 		return
 	}
 
-	_ = h.logRepo.Create(model.AdminLog{
+	_ = h.logRepo.Create(&model.AdminLog{
 		AdminID:    actor.UserID,
 		Action:     "knowledge.delete",
 		TargetType: "knowledge",

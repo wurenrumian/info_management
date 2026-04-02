@@ -29,7 +29,7 @@ func TestAdminLogRepoCreate(t *testing.T) {
 		TargetID:   1,
 		IPAddress:  "127.0.0.1",
 	}
-	require.NoError(t, r.Create(log))
+	require.NoError(t, r.Create(&log))
 
 	var found model.AdminLog
 	require.NoError(t, db.Where("admin_id = ? AND action = ?", 100, "knowledge.create").First(&found).Error)
@@ -51,7 +51,7 @@ func TestAdminLogRepoList(t *testing.T) {
 		{AdminID: 1, Action: "class.create", TargetType: "class", TargetID: 3, IPAddress: "10.0.0.1"},
 	}
 	for _, log := range logs {
-		require.NoError(t, r.Create(log))
+		require.NoError(t, r.Create(&log))
 	}
 
 	result, err := r.List(20, 0)
@@ -67,7 +67,7 @@ func TestAdminLogRepoListWithPagination(t *testing.T) {
 	r := repo.NewAdminLogRepo(db)
 
 	for i := 0; i < 5; i++ {
-		require.NoError(t, r.Create(model.AdminLog{
+		require.NoError(t, r.Create(&model.AdminLog{
 			AdminID:    1,
 			Action:     "test.action",
 			TargetType: "test",

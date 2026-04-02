@@ -59,7 +59,7 @@ func (h *FileHandler) Upload(c *gin.Context) {
 
 	result, err := h.svc.SaveFile(file)
 	if err != nil {
-		response.Error(c, 400, err.Error())
+		response.Error(c, 400, "save file failed")
 		return
 	}
 
@@ -97,7 +97,10 @@ func (h *FileHandler) List(c *gin.Context) {
 		response.Error(c, 500, "list files failed")
 		return
 	}
-	c.JSON(200, gin.H{"data": docs, "total": total})
+	response.OK(c, gin.H{
+		"data":  docs,
+		"total": total,
+	})
 }
 
 // Get handles file metadata retrieval.
@@ -201,7 +204,7 @@ func (h *FileHandler) Delete(c *gin.Context) {
 	// Best-effort physical file deletion
 	_ = os.Remove(filepath.Join(h.uploadDir, doc.FilePath))
 
-	_ = h.logRepo.Create(model.AdminLog{
+	_ = h.logRepo.Create(&model.AdminLog{
 		AdminID:    actor.UserID,
 		Action:     "document.delete",
 		TargetType: "document",
