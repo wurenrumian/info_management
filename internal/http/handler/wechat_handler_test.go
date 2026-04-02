@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -84,4 +85,40 @@ func TestWechatBindInvalidCode(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, w.Code)
 	require.Contains(t, w.Body.String(), "invalid authorization code")
+}
+
+func TestDevLoginReturnsTokenWhenEnabled(t *testing.T) {
+	t.Setenv("APP_ENV", "dev")
+	_, r := setupWechatTestRouter(t)
+
+	body := []byte(`{"student_id":"S100"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/dev/login", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), `"token"`)
+	require.Contains(t, w.Body.String(), `"student_id":"S100"`)
+}
+
+func TestDevLoginForbiddenWhenDisabled(t *testing.T) {
+	original, had := os.LookupEnv("APP_ENV")
+	if had {
+		t.Cleanup(func() { _ = os.Setenv("APP_ENV", original) })
+	} else {
+		t.Cleanup(func() { _ = os.Unsetenv("APP_ENV") })
+	}
+	_ = os.Unsetenv("APP_ENV")
+
+	_, r := setupWechatTestRouter(t)
+
+	body := []byte(`{"student_id":"S100"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/dev/login", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusForbidden, w.Code)
+	require.Contains(t, w.Body.String(), "dev login is disabled")
 }

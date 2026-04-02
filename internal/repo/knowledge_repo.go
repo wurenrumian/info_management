@@ -157,6 +157,13 @@ func (r *KnowledgeRepo) ListWithTotal(query string, limit, offset int) ([]model.
 	return out, total, err
 }
 
+// CountAll returns the total number of knowledge items.
+func (r *KnowledgeRepo) CountAll() (int64, error) {
+	var total int64
+	err := r.db.Model(&model.KnowledgeItem{}).Count(&total).Error
+	return total, err
+}
+
 // Create inserts one knowledge item.
 func (r *KnowledgeRepo) Create(item *model.KnowledgeItem) error {
 	return r.db.Create(item).Error

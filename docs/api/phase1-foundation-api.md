@@ -6,7 +6,7 @@
 
 ## Authentication
 
-All endpoints (except `/wechat/login`, `/wechat/bind`, and `/wechat/callback`) require a JWT token in the `Authorization` header:
+All endpoints (except `/wechat/login`, `/wechat/bind`, `/wechat/callback`, and `/dev/login`) require a JWT token in the `Authorization` header:
 
 ```
 Authorization: Bearer <token>
@@ -17,6 +17,8 @@ Token payload contains: `sub` (user ID), `role`, `class_id`, `grade`.
 ## Student Endpoint
 
 - `GET /api/v1/me`
+- `PATCH /api/v1/me`
+- `GET /api/v1/profile/home`
 
 ## Admin User Endpoints
 
@@ -40,6 +42,7 @@ Token payload contains: `sub` (user ID), `role`, `class_id`, `grade`.
 - `POST /api/v1/wechat/login` — 无需认证
 - `POST /api/v1/wechat/bind` — 可选认证
 - `POST /api/v1/wechat/callback` — 无需认证（微信服务器回调）
+- `POST /api/v1/dev/login` — 仅开发环境启用
 
 ## File Endpoints
 
@@ -64,6 +67,7 @@ Token payload contains: `sub` (user ID), `role`, `class_id`, `grade`.
 - `POST /api/v1/admin/notification/templates`
 - `GET /api/v1/admin/notification/templates/:code`
 - `GET /api/v1/admin/notification/logs`
+- `GET /api/v1/notifications/unread/count`
 - `POST /api/v1/user/subscribe/report`
 
 ## Example Request

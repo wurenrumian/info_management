@@ -152,3 +152,45 @@ func TestListLogs(t *testing.T) {
 	data := resp["data"].(map[string]any)
 	require.Equal(t, float64(1), data["total"])
 }
+
+func TestUnreadCountReturnsPendingCountForCurrentUser(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler, repo := setupNotificationTest(t)
+
+	require.NoError(t, repo.CreateLog(&model.NotificationLog{
+		UserID:       100,
+		TemplateCode: "tpl_pending_1",
+		Status:       "pending",
+	}))
+	require.NoError(t, repo.CreateLog(&model.NotificationLog{
+		UserID:       100,
+		TemplateCode: "tpl_pending_2",
+		Status:       "pending",
+	}))
+	require.NoError(t, repo.CreateLog(&model.NotificationLog{
+		UserID:       100,
+		TemplateCode: "tpl_sent",
+		Status:       "sent",
+	}))
+	require.NoError(t, repo.CreateLog(&model.NotificationLog{
+		UserID:       101,
+		TemplateCode: "tpl_other_user",
+		Status:       "pending",
+	}))
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/notifications/unread/count", nil)
+	auth.SetActor(c, auth.Actor{UserID: 100, Role: model.RoleStudent, ClassID: 1, Grade: "2023"})
+
+	handler.UnreadCount(c)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var resp struct {
+		Data struct {
+			Count int64 `json:"count"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Equal(t, int64(2), resp.Data.Count)
+}

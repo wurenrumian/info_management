@@ -35,6 +35,15 @@ func (r *Repo) CreateLog(log *model.NotificationLog) error {
 	return r.db.Create(log).Error
 }
 
+// CountUnreadByUser returns the number of unread notifications for a user.
+func (r *Repo) CountUnreadByUser(userID uint) (int64, error) {
+	var total int64
+	err := r.db.Model(&model.NotificationLog{}).
+		Where("user_id = ? AND status = ?", userID, "pending").
+		Count(&total).Error
+	return total, err
+}
+
 // LogFilter defines query parameters for listing notification logs.
 type LogFilter struct {
 	UserID       *uint

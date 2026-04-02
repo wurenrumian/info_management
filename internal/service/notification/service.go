@@ -20,6 +20,7 @@ type RepoInterface interface {
 	GetTemplateByCode(code string) (*model.NotificationTemplate, error)
 	CreateTemplate(t *model.NotificationTemplate) error
 	CreateLog(log *model.NotificationLog) error
+	CountUnreadByUser(userID uint) (int64, error)
 	ListLogs(filter LogFilter) ([]model.NotificationLog, int64, error)
 }
 
@@ -120,6 +121,11 @@ func (s *Service) CreateTemplate(t *model.NotificationTemplate) error {
 // GetLogs retrieves notification send logs matching the filter.
 func (s *Service) GetLogs(filter LogFilter) ([]model.NotificationLog, int64, error) {
 	return s.repo.ListLogs(filter)
+}
+
+// GetUnreadCount returns the unread notification count for a user.
+func (s *Service) GetUnreadCount(userID uint) (int64, error) {
+	return s.repo.CountUnreadByUser(userID)
 }
 
 func (s *Service) recordLog(req SendRequest, status string, errMsg string) {
