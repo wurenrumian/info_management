@@ -57,6 +57,52 @@ func TestGetMeReturnsSelf(t *testing.T) {
 	require.NotContains(t, w.Body.String(), "S101")
 }
 
+func TestGetMeReturnsTeacherSelfInsteadOfFirstScopedUser(t *testing.T) {
+	db, r := setupMeTestRouter(t)
+
+	require.NoError(t, db.Create(&model.User{
+		ID:        102,
+		StudentID: "T102",
+		Name:      "王老师",
+		Role:      model.RoleTeacher,
+		ClassID:   1,
+		Grade:     "2023",
+	}).Error)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+	token := testutil.GenerateTestToken(102, model.RoleTeacher, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), "T102")
+	require.NotContains(t, w.Body.String(), "S100")
+}
+
+func TestGetProfileHomeReturnsTeacherSelfInsteadOfFirstScopedUser(t *testing.T) {
+	db, r := setupMeTestRouter(t)
+
+	require.NoError(t, db.Create(&model.User{
+		ID:        102,
+		StudentID: "T102",
+		Name:      "王老师",
+		Role:      model.RoleTeacher,
+		ClassID:   1,
+		Grade:     "2023",
+	}).Error)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/profile/home", nil)
+	token := testutil.GenerateTestToken(102, model.RoleTeacher, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), "T102")
+	require.NotContains(t, w.Body.String(), "S100")
+}
+
 func TestGetMeForbiddenForUnknownRole(t *testing.T) {
 	_, r := setupMeTestRouter(t)
 
