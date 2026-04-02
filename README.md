@@ -49,6 +49,7 @@ Token claims: `sub` (user ID), `role`, `class_id`, `grade`.
 WeChat endpoints:
 - `POST /api/v1/wechat/login` — no auth required, returns JWT token
 - `POST /api/v1/wechat/bind` — optional auth (with token binds to current user, without token requires `student_id` + `password`)
+- `POST /api/v1/dev/register-or-login` — dev only, returns JWT and creates a test user when missing
 
 ## Environment Variables
 
@@ -62,6 +63,39 @@ WeChat endpoints:
 | `DOCUMENT_UPLOAD_DIR` | Unified document upload directory |
 | `KNOWLEDGE_UPLOAD_DIR` | Legacy knowledge upload directory (compat only) |
 | `WECHAT_SUBSCRIBE_MSG_ENABLED` | Enable WeChat subscribe message sending (default: true) |
+| `APP_ENV` | Set to `dev` to enable dev-only auth helpers |
+
+## Dev Login For Frontend
+
+For H5/local integration that should skip WeChat auth:
+
+```bash
+export APP_ENV=dev
+go run ./cmd/server
+```
+
+Then request a token with:
+
+```bash
+./scripts/dev/dev_login_curl.sh
+```
+
+Optional overrides:
+
+```bash
+BASE_URL=http://127.0.0.1:8080 STUDENT_ID=2020002 ROLE=2 ./scripts/dev/dev_login_curl.sh
+```
+
+To load the token into your current shell:
+
+```bash
+source ./scripts/dev/dev_login_export.sh
+```
+
+Behavior:
+- existing `student_id`: returns a JWT for that user
+- missing `student_id`: creates a dev test user and returns a JWT
+- non-dev environment: returns `403`
 
 ## Run Tests
 

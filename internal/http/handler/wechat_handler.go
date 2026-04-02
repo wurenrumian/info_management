@@ -43,6 +43,7 @@ type wechatBindReq struct {
 
 type devLoginReq struct {
 	StudentID string `json:"student_id"`
+	Role      *int   `json:"role"`
 }
 
 func (h *WechatHandler) Login(c *gin.Context) {
@@ -145,9 +146,9 @@ func (h *WechatHandler) Bind(c *gin.Context) {
 	response.OK(c, gin.H{"ok": true, "message": "bind success"})
 }
 
-func (h *WechatHandler) DevLogin(c *gin.Context) {
+func (h *WechatHandler) DevRegisterOrLogin(c *gin.Context) {
 	if strings.TrimSpace(os.Getenv("APP_ENV")) != "dev" {
-		response.Error(c, 403, "dev login is disabled")
+		response.Error(c, 403, "dev register-or-login is disabled")
 		return
 	}
 
@@ -157,13 +158,15 @@ func (h *WechatHandler) DevLogin(c *gin.Context) {
 		return
 	}
 
-	token, user, err := h.devLogin.LoginByStudentID(req.StudentID)
+	token, user, err := h.devLogin.RegisterOrLogin(req.StudentID, req.Role)
 	if err != nil {
 		switch err.Error() {
 		case "missing student_id":
 			response.Error(c, 400, "missing student_id")
+		case "invalid role":
+			response.Error(c, 400, "invalid role")
 		default:
-			response.Error(c, 404, "user not found")
+			response.Error(c, 500, "dev register-or-login failed")
 		}
 		return
 	}

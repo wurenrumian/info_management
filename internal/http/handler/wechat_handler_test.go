@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
 	"manage/internal/http/router"
 	"manage/internal/model"
 )
@@ -19,6 +20,12 @@ func setupWechatTestRouter(t *testing.T) (*gorm.DB, http.Handler) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Class{}))
+	require.NoError(t, db.Create(&model.Class{
+		ID:        1,
+		ClassName: "Class 1",
+		Grade:     "2023",
+		Major:     "信息管理",
+	}).Error)
 
 	pwd := "hashed_password"
 	require.NoError(t, db.Create(&model.User{
@@ -87,12 +94,12 @@ func TestWechatBindInvalidCode(t *testing.T) {
 	require.Contains(t, w.Body.String(), "invalid authorization code")
 }
 
-func TestDevLoginReturnsTokenWhenEnabled(t *testing.T) {
+func TestDevRegisterOrLoginReturnsTokenForExistingUser(t *testing.T) {
 	t.Setenv("APP_ENV", "dev")
 	_, r := setupWechatTestRouter(t)
 
 	body := []byte(`{"student_id":"S100"}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/dev/login", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/dev/register-or-login", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -102,7 +109,31 @@ func TestDevLoginReturnsTokenWhenEnabled(t *testing.T) {
 	require.Contains(t, w.Body.String(), `"student_id":"S100"`)
 }
 
-func TestDevLoginForbiddenWhenDisabled(t *testing.T) {
+func TestDevRegisterOrLoginCreatesUserWhenMissing(t *testing.T) {
+	t.Setenv("APP_ENV", "dev")
+	db, r := setupWechatTestRouter(t)
+
+	body := []byte(`{"student_id":"S200","role":2}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/dev/register-or-login", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), `"student_id":"S200"`)
+	require.Contains(t, w.Body.String(), `"name":"Dev-S200"`)
+	require.Contains(t, w.Body.String(), `"role":2`)
+
+	var user model.User
+	require.NoError(t, db.Where("student_id = ?", "S200").First(&user).Error)
+	require.Equal(t, "Dev-S200", user.Name)
+	require.Equal(t, model.RoleCadre, user.Role)
+	require.Equal(t, "2020", user.Grade)
+	require.Equal(t, "信息管理", user.Major)
+	require.Equal(t, uint(10), user.ClassID)
+}
+
+func TestDevRegisterOrLoginForbiddenWhenDisabled(t *testing.T) {
 	original, had := os.LookupEnv("APP_ENV")
 	if had {
 		t.Cleanup(func() { _ = os.Setenv("APP_ENV", original) })
@@ -114,11 +145,11 @@ func TestDevLoginForbiddenWhenDisabled(t *testing.T) {
 	_, r := setupWechatTestRouter(t)
 
 	body := []byte(`{"student_id":"S100"}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/dev/login", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/dev/register-or-login", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusForbidden, w.Code)
-	require.Contains(t, w.Body.String(), "dev login is disabled")
+	require.Contains(t, w.Body.String(), "dev register-or-login is disabled")
 }
