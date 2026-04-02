@@ -10,20 +10,18 @@ import (
 
 // WechatClient provides an HTTP client for the WeChat subscribe message API.
 type WechatClient struct {
-	appID      string
-	appSecret  string
+	tokenCache *TokenCache
 	httpClient *http.Client
 	baseURL    string
 }
 
 // NewWechatClient creates a WechatClient. If httpClient is nil, a default client is used.
-func NewWechatClient(httpClient *http.Client, appID, appSecret string) *WechatClient {
+func NewWechatClient(httpClient *http.Client, tokenCache *TokenCache) *WechatClient {
 	if httpClient == nil {
 		httpClient = &http.Client{}
 	}
 	return &WechatClient{
-		appID:      appID,
-		appSecret:  appSecret,
+		tokenCache: tokenCache,
 		httpClient: httpClient,
 		baseURL:    "https://api.weixin.qq.com",
 	}
@@ -44,7 +42,7 @@ type subscribeMsgResp struct {
 
 // SendSubscribeMessage sends a subscribe message to the given openid.
 func (c *WechatClient) SendSubscribeMessage(openid, templateID, page string, data map[string]interface{}) error {
-	accessToken, err := c.getAccessToken()
+	accessToken, err := c.tokenCache.GetToken()
 	if err != nil {
 		return fmt.Errorf("get access token: %w", err)
 	}
@@ -85,38 +83,4 @@ func (c *WechatClient) SendSubscribeMessage(openid, templateID, page string, dat
 	}
 
 	return nil
-}
-
-type tokenResp struct {
-	AccessToken string `json:"access_token"`
-	ExpiresIn   int    `json:"expires_in"`
-	ErrCode     int    `json:"errcode"`
-	ErrMsg      string `json:"errmsg"`
-}
-
-func (c *WechatClient) getAccessToken() (string, error) {
-	url := fmt.Sprintf("%s/cgi-bin/token?grant_type=client_credential&appid=%s&secret=%s",
-		c.baseURL, c.appID, c.appSecret)
-
-	resp, err := c.httpClient.Get(url)
-	if err != nil {
-		return "", fmt.Errorf("http request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("read response: %w", err)
-	}
-
-	var result tokenResp
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", fmt.Errorf("parse response: %w", err)
-	}
-
-	if result.ErrCode != 0 {
-		return "", fmt.Errorf("get token error %d: %s", result.ErrCode, result.ErrMsg)
-	}
-
-	return result.AccessToken, nil
 }

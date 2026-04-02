@@ -43,6 +43,9 @@ func New(db *gorm.DB) *gin.Engine {
 	api.POST("/wechat/login", wechatHandler.Login)
 	api.POST("/wechat/bind", middleware.OptionalJWTAuth(jwtSecret), wechatHandler.Bind)
 
+	subscribeHandler := handler.NewSubscribeHandler(db)
+	api.POST("/wechat/callback", subscribeHandler.WechatCallback)
+
 	api.Use(middleware.JWTAuth(jwtSecret))
 
 	meHandler := handler.NewMeHandler(db)
@@ -62,6 +65,8 @@ func New(db *gorm.DB) *gin.Engine {
 	api.GET("/files/:id", fileHandler.Get)
 	api.GET("/files/:id/download", fileHandler.Download)
 	api.DELETE("/files/:id", fileHandler.Delete)
+
+	api.POST("/user/subscribe/report", subscribeHandler.ReportSubscribe)
 
 	admin := api.Group("/admin")
 	admin.GET("/users", adminUserHandler.ListUsers)
@@ -95,7 +100,8 @@ func New(db *gorm.DB) *gin.Engine {
 func initNotificationSvc(db *gorm.DB) *notification.Service {
 	appID := os.Getenv("WECHAT_APP_ID")
 	appSecret := os.Getenv("WECHAT_APP_SECRET")
-	wechatClient := notification.NewWechatClient(nil, appID, appSecret)
+	tokenCache := notification.NewTokenCache(appID, appSecret, nil)
+	wechatClient := notification.NewWechatClient(nil, tokenCache)
 	repo := notification.NewRepo(db)
 	userRepo := notification.NewGormUserRepo(db)
 	return notification.NewService(wechatClient, repo, userRepo)

@@ -29,7 +29,10 @@ func TestSendSubscribeMessageSuccess(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	client := NewWechatClient(nil, "fake_appid", "fake_secret")
+	tokenCache := NewTokenCache("fake_appid", "fake_secret", nil)
+	tokenCache.baseURL = srv.URL
+
+	client := NewWechatClient(nil, tokenCache)
 	client.baseURL = srv.URL
 
 	err := client.SendSubscribeMessage("openid123", "tmpl_123", "/pages/index", map[string]interface{}{
@@ -58,7 +61,10 @@ func TestSendSubscribeMessageWechatError(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	client := NewWechatClient(nil, "fake_appid", "fake_secret")
+	tokenCache := NewTokenCache("fake_appid", "fake_secret", nil)
+	tokenCache.baseURL = srv.URL
+
+	client := NewWechatClient(nil, tokenCache)
 	client.baseURL = srv.URL
 
 	err := client.SendSubscribeMessage("openid123", "tmpl_123", "/pages/index", map[string]interface{}{
@@ -81,7 +87,10 @@ func TestSendSubscribeMessageTokenError(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	client := NewWechatClient(nil, "fake_appid", "fake_secret")
+	tokenCache := NewTokenCache("fake_appid", "fake_secret", nil)
+	tokenCache.baseURL = srv.URL
+
+	client := NewWechatClient(nil, tokenCache)
 	client.baseURL = srv.URL
 
 	err := client.SendSubscribeMessage("openid123", "tmpl_123", "/pages/index", nil)
