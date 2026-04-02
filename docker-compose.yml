@@ -11,7 +11,7 @@ services:
       - DB_PASSWORD=123456
       - DB_MODE=pg
     volumes:
-      - ./license_71193_0.dat:/home/kingbase/userdata/etc/license.dat
+      - ./license_71193_0.dat:/home/system/license_71193_0.dat:ro
       - kingbase_data:/home/kingbase/userdata
     healthcheck:
       test: ["CMD-SHELL", "ksql -U system -d test -p 54321 -c \"SELECT 1\" >/dev/null 2>&1 || exit 1"]
