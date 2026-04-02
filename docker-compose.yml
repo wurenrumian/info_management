@@ -5,6 +5,9 @@ services:
     container_name: ${KINGBASE_CONTAINER_NAME:-kingbase-test}
     privileged: true
     restart: unless-stopped
+    ports:
+      # Expose Kingbase on the host so LAN clients can connect via <host-ip>:54321.
+      - "${KINGBASE_PORT_BIND:-54321:54321}"
     environment:
       - NEED_START=yes
       - DB_USER=system
