@@ -29,15 +29,17 @@
 **成功响应**（200）：
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiIs...",
-  "user": {
-    "id": 1,
-    "student_id": "2020001",
-    "name": "张三",
-    "role": 1,
-    "class_id": 10,
-    "grade": "2020",
-    "major": "计算机科学与技术"
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIs...",
+    "user": {
+      "id": 1,
+      "student_id": "2020001",
+      "name": "张三",
+      "role": 1,
+      "class_id": 10,
+      "grade": "2020",
+      "major": "计算机科学与技术"
+    }
   }
 }
 ```

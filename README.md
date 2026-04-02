@@ -59,7 +59,8 @@ WeChat endpoints:
 | `WECHAT_APP_SECRET` | WeChat Mini Program AppSecret |
 | `DATABASE_DSN` | Database connection string |
 | `PORT` | Server port (default: 8080) |
-| `KNOWLEDGE_UPLOAD_DIR` | Knowledge base upload directory |
+| `DOCUMENT_UPLOAD_DIR` | Unified document upload directory |
+| `KNOWLEDGE_UPLOAD_DIR` | Legacy knowledge upload directory (compat only) |
 | `WECHAT_SUBSCRIBE_MSG_ENABLED` | Enable WeChat subscribe message sending (default: true) |
 
 ## Run Tests
@@ -71,8 +72,12 @@ go test ./... -count=1
 ## API Documentation
 
 - `docs/api/phase1-foundation-api.md`
+- `docs/api/phase2-files-api.md`
 - `docs/api/phase2-knowledge-api.md`
 - `docs/api/phase2-wechat-api.md`
+- `docs/api/phase2-partyflow-api.md` (v0 placeholder)
+- `docs/api/phase2-approvals-api.md` (v0 placeholder)
+- `docs/api/phase2-announcements-api.md` (v0 placeholder)
 
 ## Knowledge Base Demo (Phase 2)
 

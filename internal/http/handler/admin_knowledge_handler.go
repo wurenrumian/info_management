@@ -32,9 +32,9 @@ type AdminKnowledgeHandler struct {
 
 // NewAdminKnowledgeHandler creates an admin knowledge handler.
 func NewAdminKnowledgeHandler(db *gorm.DB) *AdminKnowledgeHandler {
-	uploadDir := os.Getenv("KNOWLEDGE_UPLOAD_DIR")
+	uploadDir := os.Getenv("DOCUMENT_UPLOAD_DIR")
 	if strings.TrimSpace(uploadDir) == "" {
-		uploadDir = os.Getenv("DOCUMENT_UPLOAD_DIR")
+		uploadDir = os.Getenv("KNOWLEDGE_UPLOAD_DIR")
 		if uploadDir == "" {
 			uploadDir = "./data/uploads/documents"
 		}
@@ -80,10 +80,7 @@ func (h *AdminKnowledgeHandler) ListKnowledge(c *gin.Context) {
 		response.Error(c, 500, "list knowledge failed")
 		return
 	}
-	response.OK(c, gin.H{
-		"data":  items,
-		"total": total,
-	})
+	response.List(c, items, total)
 }
 
 // GetKnowledge gets one knowledge item by id.

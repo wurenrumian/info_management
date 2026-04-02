@@ -112,6 +112,8 @@ manage/
 - API 前缀：`/api/v1`
 - 成功响应：`{"data": ...}`
 - 失败响应：`{"error": "..."}`
+- 列表响应（推荐统一）：`{"data": [...], "total": N}`
+- 统一通过 `internal/http/response` 输出响应（避免 handler 直接拼 JSON）
 
 HTTP 状态码：
 - `200` 成功
@@ -136,6 +138,8 @@ Token 由 `POST /api/v1/wechat/login` 返回，包含 `sub`（user ID）、`role
 环境变量：
 - `JWT_SECRET` — JWT 签名密钥（生产环境必须设置）
 - `WECHAT_APP_ID` / `WECHAT_APP_SECRET` — 微信小程序配置
+- `DOCUMENT_UPLOAD_DIR` — 统一文件上传目录（推荐）
+- `KNOWLEDGE_UPLOAD_DIR` — 旧知识库目录（仅兼容历史部署）
 
 权限流程（必须）：
 1. JWT 中间件解析 token 并注入 `auth.Actor`
@@ -257,6 +261,9 @@ go test ./... -count=1
 推荐位置：
 - API 文档：`docs/api/`
 - 设计与计划：`docs/superpowers/specs/`、`docs/superpowers/plans/`
+
+Phase 2 并行开发要求：
+- 每个并行模块（`partyflow` / `knowledge` / `approvals` / `announcements`）都必须有对应 API 文档文件（可先提交 v0 占位稿）
 
 ---
 

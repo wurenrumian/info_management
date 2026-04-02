@@ -41,8 +41,5 @@ func (h *KnowledgeHandler) Search(c *gin.Context) {
 		response.Error(c, 500, "search knowledge failed")
 		return
 	}
-	response.OK(c, gin.H{
-		"data":  items,
-		"total": total,
-	})
+	response.List(c, items, total)
 }
