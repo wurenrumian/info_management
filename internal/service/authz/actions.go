@@ -2,6 +2,8 @@ package authz
 
 const (
 	ActionGetMe           = "me:get"
+	ActionMePatch         = "me:patch"
+	ActionProfileHomeGet  = "profile_home:get"
 	ActionKnowledgeSearch = "knowledge:search"
 	ActionKnowledgeList   = "knowledge:list"
 	ActionKnowledgeGet    = "knowledge:get"
@@ -23,4 +25,5 @@ const (
 	ActionNotifTplCreate  = "notification:template:create"
 	ActionNotifTplGet     = "notification:template:get"
 	ActionNotifLogsList   = "notification:logs:list"
+	ActionNotifUnreadGet  = "notification:unread:get"
 )

@@ -42,6 +42,7 @@ func New(db *gorm.DB) *gin.Engine {
 	wechatHandler := handler.NewWechatHandler(db, appID, appSecret, jwtSecret)
 	api.POST("/wechat/login", wechatHandler.Login)
 	api.POST("/wechat/bind", middleware.OptionalJWTAuth(jwtSecret), wechatHandler.Bind)
+	api.POST("/dev/login", wechatHandler.DevLogin)
 
 	subscribeHandler := handler.NewSubscribeHandler(db)
 	api.POST("/wechat/callback", subscribeHandler.WechatCallback)
@@ -57,6 +58,8 @@ func New(db *gorm.DB) *gin.Engine {
 	fileHandler := handler.NewFileHandler(db)
 
 	api.GET("/me", meHandler.GetMe)
+	api.PATCH("/me", meHandler.PatchMe)
+	api.GET("/profile/home", meHandler.GetProfileHome)
 	api.GET("/knowledge/search", knowledgeHandler.Search)
 
 	// File APIs
@@ -93,6 +96,7 @@ func New(db *gorm.DB) *gin.Engine {
 	admin.POST("/notification/templates", notifHandler.CreateTemplate)
 	admin.GET("/notification/templates/:code", notifHandler.GetTemplate)
 	admin.GET("/notification/logs", notifHandler.ListLogs)
+	api.GET("/notifications/unread/count", notifHandler.UnreadCount)
 
 	return r
 }

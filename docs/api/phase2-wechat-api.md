@@ -8,6 +8,7 @@
 
 - `/wechat/login` — 无需认证
 - `/wechat/bind` — 可选认证（已登录走 token，未登录走学号+密码）
+- `/dev/login` — 仅 `APP_ENV=dev` 时启用
 
 ## Endpoints
 
@@ -103,3 +104,39 @@
 | 401 | `{"error":"请登录后绑定或提供学号和密码"}` | 既无 token 也无学号密码 |
 | 409 | `{"error":"该微信已绑定其他账号"}` | openid 已被其他用户绑定 |
 | 500 | `{"error":"绑定失败"}` | 数据库错误 |
+
+---
+
+### POST /api/v1/dev/login — 开发环境快捷登录
+
+仅在 `APP_ENV=dev` 时可用。
+
+**请求体**：
+```json
+{ "student_id": "2020001" }
+```
+
+**成功响应**（200）：
+```json
+{
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIs...",
+    "user": {
+      "id": 1,
+      "student_id": "2020001",
+      "name": "张三",
+      "role": 1,
+      "class_id": 10,
+      "grade": "2020",
+      "major": "计算机科学与技术"
+    }
+  }
+}
+```
+
+**错误响应**：
+| 状态码 | 响应体 | 说明 |
+|--------|--------|------|
+| 400 | `{"error":"missing student_id"}` | 缺少学号 |
+| 403 | `{"error":"dev login is disabled"}` | 非开发环境 |
+| 404 | `{"error":"user not found"}` | 学号不存在 |

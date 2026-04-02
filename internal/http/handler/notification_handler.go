@@ -132,3 +132,24 @@ func (h *NotificationHandler) ListLogs(c *gin.Context) {
 		"total": total,
 	})
 }
+
+// UnreadCount handles GET /notifications/unread/count.
+func (h *NotificationHandler) UnreadCount(c *gin.Context) {
+	actor, ok := auth.GetActor(c)
+	if !ok {
+		response.Error(c, 401, "unauthorized")
+		return
+	}
+	if !authz.Authorize(actor.Role, authz.ActionNotifUnreadGet) {
+		response.Error(c, 403, "forbidden")
+		return
+	}
+
+	count, err := h.svc.GetUnreadCount(actor.UserID)
+	if err != nil {
+		response.Error(c, 500, "count unread notifications failed")
+		return
+	}
+
+	response.OK(c, gin.H{"count": count})
+}

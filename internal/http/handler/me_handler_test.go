@@ -1,11 +1,14 @@
 package handler_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gorm.io/datatypes"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"manage/internal/http/router"
@@ -17,7 +20,7 @@ func setupMeTestRouter(t *testing.T) (*gorm.DB, http.Handler) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Class{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Class{}, &model.KnowledgeItem{}, &model.NotificationLog{}))
 
 	require.NoError(t, db.Create(&model.User{
 		ID:        100,
@@ -77,4 +80,101 @@ func TestGetMeNotFound(t *testing.T) {
 
 	require.Equal(t, http.StatusNotFound, w.Code)
 	require.Contains(t, w.Body.String(), "user not found")
+}
+
+func TestGetProfileHomeReturnsAggregatedData(t *testing.T) {
+	db, r := setupMeTestRouter(t)
+
+	require.NoError(t, db.Create(&model.KnowledgeItem{
+		Question:  "Q1",
+		Answer:    "A1",
+		CreatedBy: 100,
+		UpdatedBy: 100,
+	}).Error)
+	require.NoError(t, db.Create(&model.KnowledgeItem{
+		Question:  "Q2",
+		Answer:    "A2",
+		CreatedBy: 100,
+		UpdatedBy: 100,
+	}).Error)
+	require.NoError(t, db.Create(&model.NotificationLog{
+		UserID:       100,
+		TemplateCode: "tpl_pending",
+		Status:       "pending",
+	}).Error)
+	require.NoError(t, db.Create(&model.NotificationLog{
+		UserID:       100,
+		TemplateCode: "tpl_sent",
+		Status:       "sent",
+	}).Error)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/profile/home", nil)
+	token := testutil.GenerateTestToken(100, 1, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp struct {
+		Data struct {
+			Basic struct {
+				ID        uint   `json:"id"`
+				StudentID string `json:"student_id"`
+			} `json:"basic"`
+			QuickEntry struct {
+				AnnouncementsCount int64 `json:"announcements_count"`
+				ApprovalsCount     int64 `json:"approvals_count"`
+				KnowledgeCount     int64 `json:"knowledge_count"`
+			} `json:"quick_entry"`
+			Account struct {
+				WechatBound bool `json:"wechat_bound"`
+			} `json:"account"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Equal(t, uint(100), resp.Data.Basic.ID)
+	require.Equal(t, "S100", resp.Data.Basic.StudentID)
+	require.Equal(t, int64(0), resp.Data.QuickEntry.AnnouncementsCount)
+	require.Equal(t, int64(0), resp.Data.QuickEntry.ApprovalsCount)
+	require.Equal(t, int64(2), resp.Data.QuickEntry.KnowledgeCount)
+	require.False(t, resp.Data.Account.WechatBound)
+}
+
+func TestPatchMeUpdatesProfileAttrs(t *testing.T) {
+	db, r := setupMeTestRouter(t)
+
+	body := []byte(`{"avatar_url":"https://example.com/avatar.png","bio":"个人简介"}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/me", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(100, 1, 1, "2023"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), `"ok":true`)
+
+	var user model.User
+	require.NoError(t, db.First(&user, 100).Error)
+
+	var attrs map[string]string
+	require.NoError(t, json.Unmarshal([]byte(user.ProfileAttrs), &attrs))
+	require.Equal(t, "https://example.com/avatar.png", attrs["avatar_url"])
+	require.Equal(t, "个人简介", attrs["bio"])
+
+	require.NoError(t, db.Model(&model.User{}).Where("id = ?", 100).Update("profile_attrs", datatypes.JSON([]byte(`{"avatar_url":"old","bio":"old","theme":"blue"}`))).Error)
+
+	body = []byte(`{"avatar_url":"new-avatar","bio":"new-bio"}`)
+	req = httptest.NewRequest(http.MethodPatch, "/api/v1/me", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(100, 1, 1, "2023"))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NoError(t, db.First(&user, 100).Error)
+	require.NoError(t, json.Unmarshal([]byte(user.ProfileAttrs), &attrs))
+	require.Equal(t, "new-avatar", attrs["avatar_url"])
+	require.Equal(t, "new-bio", attrs["bio"])
+	require.Equal(t, "blue", attrs["theme"])
 }

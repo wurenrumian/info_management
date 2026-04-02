@@ -2,7 +2,7 @@
 
 ## 概述
 
-通知模块提供微信小程序订阅消息的模板管理与发送记录查询功能。所有接口均需管理员权限，学生角色无权访问。
+通知模块提供微信小程序订阅消息的模板管理、发送记录查询与用户未读数量查询功能。
 
 ## 基础信息
 
@@ -188,6 +188,32 @@ POST /api/v1/wechat/callback
 |-------|------|
 | `subscribe_msg_popup_event` | 用户弹窗选择订阅/拒绝 |
 | `subscribe_msg_change_event` | 用户在设置中修改订阅状态 |
+
+---
+
+### 6. 获取未读消息数量
+
+```
+GET /api/v1/notifications/unread/count
+```
+
+**权限**：已登录用户（JWT 认证）
+
+**说明**：当前实现将 `notification_logs.status = pending` 视为未读消息。
+
+**响应**：
+
+- `200 OK`：`{"data":{"count":2}}`
+- `401 Unauthorized`：未登录
+- `403 Forbidden`：无权限
+- `500 Internal Server Error`：服务器错误
+
+**示例**：
+
+```bash
+curl http://localhost:8080/api/v1/notifications/unread/count \
+  -H "Authorization: Bearer <token>"
+```
 
 ## 权限规则
 

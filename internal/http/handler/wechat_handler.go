@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"os"
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -15,6 +18,7 @@ import (
 type WechatHandler struct {
 	wechatSvc *wechat.Service
 	userRepo  *repo.UserRepo
+	devLogin  *jwtauth.DevLoginService
 	jwtSecret string
 }
 
@@ -22,6 +26,7 @@ func NewWechatHandler(db *gorm.DB, appID, appSecret, jwtSecret string) *WechatHa
 	return &WechatHandler{
 		wechatSvc: wechat.NewService(appID, appSecret),
 		userRepo:  repo.NewUserRepo(db),
+		devLogin:  jwtauth.NewDevLoginService(db, jwtSecret),
 		jwtSecret: jwtSecret,
 	}
 }
@@ -34,6 +39,10 @@ type wechatBindReq struct {
 	Code      string `json:"code"`
 	StudentID string `json:"student_id"`
 	Password  string `json:"password"`
+}
+
+type devLoginReq struct {
+	StudentID string `json:"student_id"`
 }
 
 func (h *WechatHandler) Login(c *gin.Context) {
@@ -134,4 +143,41 @@ func (h *WechatHandler) Bind(c *gin.Context) {
 	}
 
 	response.OK(c, gin.H{"ok": true, "message": "bind success"})
+}
+
+func (h *WechatHandler) DevLogin(c *gin.Context) {
+	if strings.TrimSpace(os.Getenv("APP_ENV")) != "dev" {
+		response.Error(c, 403, "dev login is disabled")
+		return
+	}
+
+	var req devLoginReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, 400, "invalid body")
+		return
+	}
+
+	token, user, err := h.devLogin.LoginByStudentID(req.StudentID)
+	if err != nil {
+		switch err.Error() {
+		case "missing student_id":
+			response.Error(c, 400, "missing student_id")
+		default:
+			response.Error(c, 404, "user not found")
+		}
+		return
+	}
+
+	response.OK(c, gin.H{
+		"token": token,
+		"user": gin.H{
+			"id":         user.ID,
+			"student_id": user.StudentID,
+			"name":       user.Name,
+			"role":       user.Role,
+			"class_id":   user.ClassID,
+			"grade":      user.Grade,
+			"major":      user.Major,
+		},
+	})
 }
