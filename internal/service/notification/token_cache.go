@@ -86,7 +86,12 @@ func (c *TokenCache) RefreshToken() (string, error) {
 
 	c.token = result.AccessToken
 	// WeChat token expires in 7200s; refresh 5 minutes early.
-	c.expiresAt = time.Now().Add(time.Duration(result.ExpiresIn-300) * time.Second)
+	// Guard against unexpectedly small ExpiresIn values.
+	refreshAfter := result.ExpiresIn - 300
+	if refreshAfter <= 0 {
+		refreshAfter = result.ExpiresIn / 2
+	}
+	c.expiresAt = time.Now().Add(time.Duration(refreshAfter) * time.Second)
 
 	return c.token, nil
 }

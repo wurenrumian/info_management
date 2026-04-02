@@ -149,5 +149,6 @@ func TestListLogs(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	var resp map[string]any
 	json.Unmarshal(w.Body.Bytes(), &resp)
-	require.Equal(t, float64(1), resp["total"])
+	data := resp["data"].(map[string]any)
+	require.Equal(t, float64(1), data["total"])
 }

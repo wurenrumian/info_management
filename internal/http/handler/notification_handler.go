@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"manage/internal/auth"
+	"manage/internal/http/response"
 	"manage/internal/model"
 	"manage/internal/service/authz"
 	"manage/internal/service/notification"
@@ -26,7 +27,7 @@ func NewNotificationHandler(svc *notification.Service) *NotificationHandler {
 func (h *NotificationHandler) CreateTemplate(c *gin.Context) {
 	actor, ok := auth.GetActor(c)
 	if !ok || !authz.Authorize(actor.Role, authz.ActionNotifTplCreate) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		response.Error(c, http.StatusForbidden, "forbidden")
 		return
 	}
 
@@ -37,7 +38,7 @@ func (h *NotificationHandler) CreateTemplate(c *gin.Context) {
 		Fields           string `json:"fields"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -49,7 +50,7 @@ func (h *NotificationHandler) CreateTemplate(c *gin.Context) {
 	}
 
 	if err := h.svc.CreateTemplate(tmpl); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		response.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -60,24 +61,24 @@ func (h *NotificationHandler) CreateTemplate(c *gin.Context) {
 func (h *NotificationHandler) GetTemplate(c *gin.Context) {
 	actor, ok := auth.GetActor(c)
 	if !ok || !authz.Authorize(actor.Role, authz.ActionNotifTplGet) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		response.Error(c, http.StatusForbidden, "forbidden")
 		return
 	}
 
 	code := c.Param("code")
 	tmpl, err := h.svc.GetTemplate(code)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "template not found"})
+		response.Error(c, http.StatusNotFound, "template not found")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": tmpl})
+	response.OK(c, tmpl)
 }
 
 // ListLogs handles GET /admin/notification/logs.
 func (h *NotificationHandler) ListLogs(c *gin.Context) {
 	actor, ok := auth.GetActor(c)
 	if !ok || !authz.Authorize(actor.Role, authz.ActionNotifLogsList) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		response.Error(c, http.StatusForbidden, "forbidden")
 		return
 	}
 
@@ -111,11 +112,11 @@ func (h *NotificationHandler) ListLogs(c *gin.Context) {
 
 	logs, total, err := h.svc.GetLogs(filter)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		response.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	response.OK(c, gin.H{
 		"data":  logs,
 		"total": total,
 	})

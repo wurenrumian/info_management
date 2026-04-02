@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/xml"
 	"io"
+	"log"
 	"net/http"
 	"time"
 
@@ -104,11 +105,11 @@ type wechatEventXML struct {
 // WechatCallback handles POST /api/v1/wechat/callback (WeChat server push).
 func (h *SubscribeHandler) WechatCallback(c *gin.Context) {
 	body, err := io.ReadAll(c.Request.Body)
+	defer c.Request.Body.Close()
 	if err != nil {
 		c.String(http.StatusBadRequest, "fail")
 		return
 	}
-	defer c.Request.Body.Close()
 
 	var event wechatEventXML
 	if err := xml.Unmarshal(body, &event); err != nil {
@@ -133,6 +134,7 @@ func (h *SubscribeHandler) WechatCallback(c *gin.Context) {
 func (h *SubscribeHandler) updateSubscribeByOpenID(openID, templateID, statusStr string) {
 	var user model.User
 	if err := h.db.Where("open_id = ?", openID).First(&user).Error; err != nil {
+		log.Printf("updateSubscribeByOpenID: user lookup failed for openID %s: %v", openID, err)
 		return
 	}
 
@@ -141,10 +143,12 @@ func (h *SubscribeHandler) updateSubscribeByOpenID(openID, templateID, statusStr
 		status = "unsubscribed"
 	}
 
-	h.db.Model(&model.UserSubscribe{}).
+	if err := h.db.Model(&model.UserSubscribe{}).
 		Where("user_id = ? AND wechat_template_id = ?", user.ID, templateID).
 		Updates(map[string]interface{}{
 			"status":     status,
 			"updated_at": time.Now(),
-		})
+		}).Error; err != nil {
+		log.Printf("updateSubscribeByOpenID: update failed for user %d, template %s: %v", user.ID, templateID, err)
+	}
 }
