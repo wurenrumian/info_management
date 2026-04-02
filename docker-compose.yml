@@ -1,0 +1,55 @@
+services:
+  # 金仓数据库（本地开发/联调）
+  kingbase:
+    image: ${KINGBASE_IMAGE:-kingbase_v009r001c010b0004_single_x86:v1}
+    container_name: ${KINGBASE_CONTAINER_NAME:-kingbase-test}
+    privileged: true
+    restart: unless-stopped
+    environment:
+      - NEED_START=yes
+      - DB_USER=system
+      - DB_PASSWORD=123456
+      - DB_MODE=pg
+    volumes:
+      - ./license_71193_0.dat:/home/kingbase/userdata/etc/license.dat
+      - kingbase_data:/home/kingbase/userdata
+    healthcheck:
+      test: ["CMD-SHELL", "ksql -U system -d test -p 54321 -c \"SELECT 1\" >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # 后端服务（默认连接上面的 kingbase 服务）
+  backend:
+    container_name: manage-backend
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: manage-backend:dev
+    restart: unless-stopped
+    depends_on:
+      kingbase:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      PORT: "8080"
+      DOCUMENT_UPLOAD_DIR: /data/uploads/documents
+      # 默认使用团队开发约定账号密码；可在 .env 覆盖
+      DATABASE_DSN: ${DATABASE_DSN:-host=kingbase port=54321 user=system password=123456 dbname=test sslmode=disable}
+    volumes:
+      - ./data/uploads/documents:/data/uploads/documents
+      - ./license_71193_0.dat:/certs/kingbase.dat:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  kingbase_data:
+    driver: local

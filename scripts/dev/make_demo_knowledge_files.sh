@@ -11,7 +11,8 @@ XLSX_PATH="$OUT_DIR/knowledge_demo.xlsx"
 PDF_PATH="$OUT_DIR/knowledge_demo.pdf"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-SAMPLE_PDF="$ROOT_DIR/C++体系学习建议.pdf"
+SAMPLE_PDF="$ROOT_DIR/internal/service/knowledge/testdata/sample.pdf"
+LEGACY_SAMPLE_PDF="$ROOT_DIR/C++体系学习建议.pdf"
 
 workdir="$(mktemp -d)"
 trap 'rm -rf "$workdir"' EXIT
@@ -133,8 +134,10 @@ XML
 # ---------- PDF ----------
 if [[ -f "$SAMPLE_PDF" ]]; then
   cp "$SAMPLE_PDF" "$PDF_PATH"
+elif [[ -f "$LEGACY_SAMPLE_PDF" ]]; then
+  cp "$LEGACY_SAMPLE_PDF" "$PDF_PATH"
 else
-  echo "[WARN] sample PDF not found at $SAMPLE_PDF, skipping PDF generation"
+  echo "[WARN] sample PDF not found at $SAMPLE_PDF and $LEGACY_SAMPLE_PDF, skipping PDF generation"
 fi
 
 echo "Generated:"
