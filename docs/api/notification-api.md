@@ -128,6 +128,128 @@ curl "http://localhost:8080/api/v1/admin/notification/logs?status=sent&limit=10"
   -H "Authorization: Bearer <token>"
 ```
 
+---
+
+### 4. 上报订阅结果
+
+```
+POST /api/v1/user/subscribe/report
+```
+
+**权限**：已登录用户（JWT 认证）
+
+**说明**：前端调用 `wx.requestSubscribeMessage` 后，将用户订阅结果上报给后端。
+
+**请求体**：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `template_code` | string | 是 | 模板业务标识，如 `deadline_remind` |
+| `wechat_template_id` | string | 是 | 微信后台配置的模板 ID |
+| `status` | string | 是 | `accept`（同意）或 `reject`（拒绝） |
+
+**响应**：
+
+- `200 OK`：`{"data": {"ok": true}}`
+- `400 Bad Request`：参数错误或 status 值非法
+- `401 Unauthorized`：未登录
+
+**示例**：
+
+```bash
+curl -X POST http://localhost:8080/api/v1/user/subscribe/report \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"template_code":"deadline_remind","wechat_template_id":"tmpl_123","status":"accept"}'
+```
+
+---
+
+### 5. 微信事件推送回调
+
+```
+POST /api/v1/wechat/callback
+```
+
+**权限**：无需认证（微信服务器回调）
+
+**说明**：接收微信服务器推送的订阅事件，包括用户弹窗订阅结果、订阅状态变更等。
+
+**请求体**：XML 格式（由微信服务器推送）
+
+**响应**：
+
+- `200 OK`：返回 `success` 字符串确认接收
+- `400 Bad Request`：请求体读取失败
+
+**事件类型**：
+
+| Event | 说明 |
+|-------|------|
+| `subscribe_msg_popup_event` | 用户弹窗选择订阅/拒绝 |
+| `subscribe_msg_change_event` | 用户在设置中修改订阅状态 |
+
+---
+
+### 4. 上报订阅结果
+
+```
+POST /api/v1/user/subscribe/report
+```
+
+**权限**：已登录用户（JWT 认证）
+
+**说明**：前端调用 `wx.requestSubscribeMessage` 后，将用户订阅结果上报给后端。
+
+**请求体**：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `template_code` | string | 是 | 模板业务标识，如 `deadline_remind` |
+| `wechat_template_id` | string | 是 | 微信后台配置的模板 ID |
+| `status` | string | 是 | `accept`（同意）或 `reject`（拒绝） |
+
+**响应**：
+
+- `200 OK`：`{"data": {"ok": true}}`
+- `400 Bad Request`：参数错误或 status 值非法
+- `401 Unauthorized`：未登录
+
+**示例**：
+
+```bash
+curl -X POST http://localhost:8080/api/v1/user/subscribe/report \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"template_code":"deadline_remind","wechat_template_id":"tmpl_123","status":"accept"}'
+```
+
+---
+
+### 5. 微信事件推送回调
+
+```
+POST /api/v1/wechat/callback
+```
+
+**权限**：无需认证（微信服务器回调）
+
+**说明**：接收微信服务器推送的订阅事件，包括用户弹窗订阅结果、订阅状态变更等。
+
+**请求体**：XML 格式（由微信服务器推送）
+
+**响应**：
+
+- `200 OK`：返回 `success` 字符串确认接收
+- `400 Bad Request`：请求体读取失败
+
+**事件类型**：
+
+| Event | 说明 |
+|-------|------|
+| `subscribe_msg_popup_event` | 用户弹窗选择订阅/拒绝 |
+| `subscribe_msg_change_event` | 用户在设置中修改订阅状态 |
+
 ## 权限规则
 
 | 角色 | 创建模板 | 获取模板 | 查询记录 |
