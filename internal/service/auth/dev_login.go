@@ -23,12 +23,6 @@ type DevLoginService struct {
 	jwtSecret string
 }
 
-const (
-	defaultDevClassID = 10
-	defaultDevGrade   = "2020"
-	defaultDevMajor   = "信息管理"
-)
-
 // NewDevLoginService creates a DevLoginService.
 func NewDevLoginService(db *gorm.DB, jwtSecret string) *DevLoginService {
 	return &DevLoginService{

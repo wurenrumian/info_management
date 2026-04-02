@@ -49,14 +49,7 @@ func NewService(db *gorm.DB) *Service {
 
 // GetMe returns the current user according to auth scope.
 func (s *Service) GetMe(actor auth.Actor) (*model.User, error) {
-	users, err := s.userRepo.ListByScope(authz.BuildScope(actor), 1, 0)
-	if err != nil {
-		return nil, err
-	}
-	if len(users) == 0 {
-		return nil, gorm.ErrRecordNotFound
-	}
-	return &users[0], nil
+	return s.userRepo.GetByIDInScope(authz.Scope{SelfUserID: actor.UserID}, actor.UserID)
 }
 
 // GetHome returns the aggregated homepage payload for the current user.
