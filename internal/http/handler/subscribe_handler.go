@@ -132,7 +132,7 @@ func (h *SubscribeHandler) WechatCallback(c *gin.Context) {
 
 func (h *SubscribeHandler) updateSubscribeByOpenID(openID, templateID, statusStr string) {
 	var user model.User
-	if err := h.db.Where("openid = ?", openID).First(&user).Error; err != nil {
+	if err := h.db.Where("open_id = ?", openID).First(&user).Error; err != nil {
 		return
 	}
 

@@ -21,6 +21,7 @@ func NewTestDB(t *testing.T) *gorm.DB {
 		&model.Document{},
 		&model.NotificationTemplate{},
 		&model.NotificationLog{},
+		&model.UserSubscribe{},
 	))
 	return db
 }
