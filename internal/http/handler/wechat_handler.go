@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"net/http"
-
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -47,23 +45,23 @@ func (h *WechatHandler) Login(c *gin.Context) {
 
 	openID, err := h.wechatSvc.CodeToOpenID(req.Code)
 	if err != nil {
-		response.Error(c, 400, "微信授权码无效")
+		response.Error(c, 400, "invalid authorization code")
 		return
 	}
 
 	user, err := h.userRepo.GetByOpenID(openID)
 	if err != nil {
-		response.Error(c, 404, "未绑定账号，请先绑定")
+		response.Error(c, 404, "account not bound, please bind first")
 		return
 	}
 
 	token, err := jwtauth.GenerateToken(user.ID, user.Role, user.ClassID, user.Grade, h.jwtSecret)
 	if err != nil {
-		response.Error(c, 500, "生成 token 失败")
+		response.Error(c, 500, "generate token failed")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	response.OK(c, gin.H{
 		"token": token,
 		"user": gin.H{
 			"id":         user.ID,
@@ -86,7 +84,7 @@ func (h *WechatHandler) Bind(c *gin.Context) {
 
 	openID, err := h.wechatSvc.CodeToOpenID(req.Code)
 	if err != nil {
-		response.Error(c, 400, "微信授权码无效")
+		response.Error(c, 400, "invalid authorization code")
 		return
 	}
 
@@ -100,30 +98,30 @@ func (h *WechatHandler) Bind(c *gin.Context) {
 	} else if req.StudentID != "" && req.Password != "" {
 		user, err := h.userRepo.GetByStudentID(req.StudentID)
 		if err != nil {
-			response.Error(c, 401, "学号或密码不正确")
+			response.Error(c, 401, "incorrect student id or password")
 			return
 		}
 		if user.PasswordHash == nil {
-			response.Error(c, 401, "学号或密码不正确")
+			response.Error(c, 401, "incorrect student id or password")
 			return
 		}
 		if err := bcrypt.CompareHashAndPassword([]byte(*user.PasswordHash), []byte(req.Password)); err != nil {
-			response.Error(c, 401, "学号或密码不正确")
+			response.Error(c, 401, "incorrect student id or password")
 			return
 		}
 		userID = user.ID
 	} else {
-		response.Error(c, 401, "请登录后绑定或提供学号和密码")
+		response.Error(c, 401, "please login first or provide student id and password")
 		return
 	}
 
 	if existing != nil && existing.ID != userID {
-		response.Error(c, 409, "该微信已绑定其他账号")
+		response.Error(c, 409, "this wechat account is already bound to another user")
 		return
 	}
 
 	if err := h.userRepo.UpdateByID(userID, map[string]any{"openid": openID}); err != nil {
-		response.Error(c, 500, "绑定失败")
+		response.Error(c, 500, "bind failed")
 		return
 	}
 
@@ -135,5 +133,5 @@ func (h *WechatHandler) Bind(c *gin.Context) {
 		}
 	}
 
-	response.OK(c, gin.H{"ok": true, "message": "绑定成功"})
+	response.OK(c, gin.H{"ok": true, "message": "bind success"})
 }

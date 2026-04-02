@@ -57,7 +57,7 @@ func TestWechatLoginInvalidCode(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusBadRequest, w.Code)
-	require.Contains(t, w.Body.String(), "微信授权码无效")
+	require.Contains(t, w.Body.String(), "invalid authorization code")
 }
 
 func TestWechatBindMissingCode(t *testing.T) {
@@ -83,5 +83,5 @@ func TestWechatBindInvalidCode(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusBadRequest, w.Code)
-	require.Contains(t, w.Body.String(), "微信授权码无效")
+	require.Contains(t, w.Body.String(), "invalid authorization code")
 }
