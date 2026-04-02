@@ -9,6 +9,7 @@ import (
 
 	"manage/internal/http/handler"
 	"manage/internal/http/middleware"
+	"manage/internal/service/notification"
 )
 
 func New(db *gorm.DB) *gin.Engine {
@@ -42,6 +43,9 @@ func New(db *gorm.DB) *gin.Engine {
 	api.POST("/wechat/login", wechatHandler.Login)
 	api.POST("/wechat/bind", middleware.OptionalJWTAuth(jwtSecret), wechatHandler.Bind)
 
+	subscribeHandler := handler.NewSubscribeHandler(db)
+	api.POST("/wechat/callback", subscribeHandler.WechatCallback)
+
 	api.Use(middleware.JWTAuth(jwtSecret))
 
 	meHandler := handler.NewMeHandler(db)
@@ -62,6 +66,8 @@ func New(db *gorm.DB) *gin.Engine {
 	api.GET("/files/:id/download", fileHandler.Download)
 	api.DELETE("/files/:id", fileHandler.Delete)
 
+	api.POST("/user/subscribe/report", subscribeHandler.ReportSubscribe)
+
 	admin := api.Group("/admin")
 	admin.GET("/users", adminUserHandler.ListUsers)
 	admin.GET("/users/:id", adminUserHandler.GetUser)
@@ -80,5 +86,23 @@ func New(db *gorm.DB) *gin.Engine {
 	admin.PATCH("/knowledge/:id", adminKnowledgeHandler.PatchKnowledge)
 	admin.DELETE("/knowledge/:id", adminKnowledgeHandler.DeleteKnowledge)
 
+	// Notification routes
+	notifSvc := initNotificationSvc(db)
+	notifHandler := handler.NewNotificationHandler(notifSvc)
+
+	admin.POST("/notification/templates", notifHandler.CreateTemplate)
+	admin.GET("/notification/templates/:code", notifHandler.GetTemplate)
+	admin.GET("/notification/logs", notifHandler.ListLogs)
+
 	return r
+}
+
+func initNotificationSvc(db *gorm.DB) *notification.Service {
+	appID := os.Getenv("WECHAT_APP_ID")
+	appSecret := os.Getenv("WECHAT_APP_SECRET")
+	tokenCache := notification.NewTokenCache(appID, appSecret, nil)
+	wechatClient := notification.NewWechatClient(nil, tokenCache)
+	repo := notification.NewRepo(db)
+	userRepo := notification.NewGormUserRepo(db)
+	return notification.NewService(wechatClient, repo, userRepo)
 }

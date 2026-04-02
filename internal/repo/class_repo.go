@@ -60,5 +60,12 @@ func (r *ClassRepo) Create(item *model.Class) error {
 }
 
 func (r *ClassRepo) UpdateByID(id uint, updates map[string]any) error {
-	return r.db.Model(&model.Class{}).Where("id = ?", id).Updates(updates).Error
+	result := r.db.Model(&model.Class{}).Where("id = ?", id).Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }

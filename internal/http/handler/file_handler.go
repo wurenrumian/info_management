@@ -59,7 +59,7 @@ func (h *FileHandler) Upload(c *gin.Context) {
 
 	result, err := h.svc.SaveFile(file)
 	if err != nil {
-		response.Error(c, 400, err.Error())
+		response.Error(c, 400, "save file failed")
 		return
 	}
 
@@ -201,7 +201,7 @@ func (h *FileHandler) Delete(c *gin.Context) {
 	// Best-effort physical file deletion
 	_ = os.Remove(filepath.Join(h.uploadDir, doc.FilePath))
 
-	_ = h.logRepo.Create(model.AdminLog{
+	_ = h.logRepo.Create(&model.AdminLog{
 		AdminID:    actor.UserID,
 		Action:     "document.delete",
 		TargetType: "document",

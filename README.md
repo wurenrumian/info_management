@@ -61,6 +61,7 @@ WeChat endpoints:
 | `PORT` | Server port (default: 8080) |
 | `DOCUMENT_UPLOAD_DIR` | Unified document upload directory |
 | `KNOWLEDGE_UPLOAD_DIR` | Legacy knowledge upload directory (compat only) |
+| `WECHAT_SUBSCRIBE_MSG_ENABLED` | Enable WeChat subscribe message sending (default: true) |
 
 ## Run Tests
 

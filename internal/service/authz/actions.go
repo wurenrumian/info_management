@@ -20,4 +20,7 @@ const (
 	ActionFilesGet        = "files:get"
 	ActionFilesList       = "files:list"
 	ActionFilesDelete     = "files:delete"
+	ActionNotifTplCreate  = "notification:template:create"
+	ActionNotifTplGet     = "notification:template:get"
+	ActionNotifLogsList   = "notification:logs:list"
 )

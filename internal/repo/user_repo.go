@@ -56,7 +56,14 @@ func (r *UserRepo) GetByIDInScope(scope authz.Scope, id uint) (*model.User, erro
 }
 
 func (r *UserRepo) UpdateByID(id uint, updates map[string]any) error {
-	return r.db.Model(&model.User{}).Where("id = ?", id).Updates(updates).Error
+	result := r.db.Model(&model.User{}).Where("id = ?", id).Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func (r *UserRepo) GetByOpenID(openID string) (*model.User, error) {
