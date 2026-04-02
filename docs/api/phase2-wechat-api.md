@@ -8,7 +8,7 @@
 
 - `/wechat/login` — 无需认证
 - `/wechat/bind` — 可选认证（已登录走 token，未登录走学号+密码）
-- `/dev/login` — 仅 `APP_ENV=dev` 时启用
+- `/dev/register-or-login` — 仅 `APP_ENV=dev` 时启用
 
 ## Endpoints
 
@@ -107,13 +107,13 @@
 
 ---
 
-### POST /api/v1/dev/login — 开发环境快捷登录
+### POST /api/v1/dev/register-or-login — 开发环境快捷注册或登录
 
 仅在 `APP_ENV=dev` 时可用。
 
 **请求体**：
 ```json
-{ "student_id": "2020001" }
+{ "student_id": "2020001", "role": 1 }
 ```
 
 **成功响应**（200）：
@@ -138,5 +138,11 @@
 | 状态码 | 响应体 | 说明 |
 |--------|--------|------|
 | 400 | `{"error":"missing student_id"}` | 缺少学号 |
-| 403 | `{"error":"dev login is disabled"}` | 非开发环境 |
-| 404 | `{"error":"user not found"}` | 学号不存在 |
+| 400 | `{"error":"invalid role"}` | role 非法 |
+| 403 | `{"error":"dev register-or-login is disabled"}` | 非开发环境 |
+| 500 | `{"error":"dev register-or-login failed"}` | 创建或签发 token 失败 |
+
+**行为说明**：
+1. `student_id` 已存在时，直接签发 token
+2. `student_id` 不存在时，自动创建测试用户并签发 token
+3. `role` 可选，默认学生角色

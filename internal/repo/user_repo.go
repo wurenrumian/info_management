@@ -66,6 +66,10 @@ func (r *UserRepo) UpdateByID(id uint, updates map[string]any) error {
 	return nil
 }
 
+func (r *UserRepo) Create(user *model.User) error {
+	return r.db.Create(user).Error
+}
+
 func (r *UserRepo) GetByOpenID(openID string) (*model.User, error) {
 	var user model.User
 	err := r.db.Where("openid = ?", openID).Preload("Class").First(&user).Error
