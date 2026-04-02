@@ -55,6 +55,14 @@ func (r *ClassRepo) GetByIDInScope(scope authz.Scope, id uint) (*model.Class, er
 	return &out, nil
 }
 
+func (r *ClassRepo) GetByID(id uint) (*model.Class, error) {
+	var out model.Class
+	if err := r.db.First(&out, id).Error; err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 func (r *ClassRepo) Create(item *model.Class) error {
 	return r.db.Create(item).Error
 }

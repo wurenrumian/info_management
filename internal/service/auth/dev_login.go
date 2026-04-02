@@ -8,12 +8,18 @@ import (
 
 	"manage/internal/model"
 	"manage/internal/repo"
-	"manage/internal/service/authz"
 )
 
-// DevLoginService handles development-only token issuance.
+const (
+	defaultDevClassID = 10
+	defaultDevGrade   = "2020"
+	defaultDevMajor   = "信息管理"
+)
+
+// DevLoginService handles development-only test user issuance.
 type DevLoginService struct {
 	userRepo  *repo.UserRepo
+	classRepo *repo.ClassRepo
 	jwtSecret string
 }
 
@@ -27,11 +33,12 @@ const (
 func NewDevLoginService(db *gorm.DB, jwtSecret string) *DevLoginService {
 	return &DevLoginService{
 		userRepo:  repo.NewUserRepo(db),
+		classRepo: repo.NewClassRepo(db),
 		jwtSecret: jwtSecret,
 	}
 }
 
-// RegisterOrLogin returns a JWT token and dev user for the given student ID.
+// RegisterOrLogin returns a JWT token for an existing user or creates a dev user first.
 func (s *DevLoginService) RegisterOrLogin(studentID string, role *int) (string, *model.User, error) {
 	studentID = strings.TrimSpace(studentID)
 	if studentID == "" {
@@ -43,10 +50,15 @@ func (s *DevLoginService) RegisterOrLogin(studentID string, role *int) (string, 
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return "", nil, err
 		}
+
 		devRole, err := normalizeDevRole(role)
 		if err != nil {
 			return "", nil, err
 		}
+		if err := s.ensureDefaultDevClass(); err != nil {
+			return "", nil, err
+		}
+
 		user = &model.User{
 			StudentID: studentID,
 			Name:      "Dev-" + studentID,
@@ -74,11 +86,25 @@ func normalizeDevRole(role *int) (int, error) {
 	}
 	switch *role {
 	case model.RoleStudent, model.RoleCadre, model.RoleTeacher, model.RoleSuperAdmin:
-		if !authz.Authorize(*role, authz.ActionGetMe) && *role != model.RoleSuperAdmin {
-			return 0, errors.New("invalid role")
-		}
 		return *role, nil
 	default:
 		return 0, errors.New("invalid role")
 	}
+}
+
+func (s *DevLoginService) ensureDefaultDevClass() error {
+	_, err := s.classRepo.GetByID(defaultDevClassID)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+
+	return s.classRepo.Create(&model.Class{
+		ID:        defaultDevClassID,
+		ClassName: "Dev Class 10",
+		Grade:     defaultDevGrade,
+		Major:     defaultDevMajor,
+	})
 }
