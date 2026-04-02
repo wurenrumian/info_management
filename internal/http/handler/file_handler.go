@@ -97,7 +97,7 @@ func (h *FileHandler) List(c *gin.Context) {
 		response.Error(c, 500, "list files failed")
 		return
 	}
-	c.JSON(200, gin.H{"data": docs, "total": total})
+	response.List(c, docs, total)
 }
 
 // Get handles file metadata retrieval.

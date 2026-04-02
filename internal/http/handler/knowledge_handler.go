@@ -41,5 +41,5 @@ func (h *KnowledgeHandler) Search(c *gin.Context) {
 		response.Error(c, 400, err.Error())
 		return
 	}
-	c.JSON(200, gin.H{"data": items, "total": total})
+	response.List(c, items, total)
 }
