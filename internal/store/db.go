@@ -12,7 +12,7 @@ func OpenAndMigrate(dsn string) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := db.AutoMigrate(&model.User{}, &model.Class{}, &model.AdminLog{}, &model.KnowledgeItem{}, &model.Document{}); err != nil {
+	if err := db.AutoMigrate(&model.User{}, &model.Class{}, &model.AdminLog{}, &model.KnowledgeItem{}, &model.Document{}, &model.NotificationTemplate{}, &model.NotificationLog{}); err != nil {
 		return nil, err
 	}
 	return db, nil

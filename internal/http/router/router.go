@@ -9,6 +9,7 @@ import (
 
 	"manage/internal/http/handler"
 	"manage/internal/http/middleware"
+	"manage/internal/service/notification"
 )
 
 func New(db *gorm.DB) *gin.Engine {
@@ -80,5 +81,22 @@ func New(db *gorm.DB) *gin.Engine {
 	admin.PATCH("/knowledge/:id", adminKnowledgeHandler.PatchKnowledge)
 	admin.DELETE("/knowledge/:id", adminKnowledgeHandler.DeleteKnowledge)
 
+	// Notification routes
+	notifSvc := initNotificationSvc(db)
+	notifHandler := handler.NewNotificationHandler(notifSvc)
+
+	admin.POST("/notification/templates", notifHandler.CreateTemplate)
+	admin.GET("/notification/templates/:code", notifHandler.GetTemplate)
+	admin.GET("/notification/logs", notifHandler.ListLogs)
+
 	return r
+}
+
+func initNotificationSvc(db *gorm.DB) *notification.Service {
+	appID := os.Getenv("WECHAT_APP_ID")
+	appSecret := os.Getenv("WECHAT_APP_SECRET")
+	wechatClient := notification.NewWechatClient(nil, appID, appSecret)
+	repo := notification.NewRepo(db)
+	userRepo := notification.NewGormUserRepo(db)
+	return notification.NewService(wechatClient, repo, userRepo)
 }

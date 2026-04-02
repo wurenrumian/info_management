@@ -60,6 +60,7 @@ WeChat endpoints:
 | `DATABASE_DSN` | Database connection string |
 | `PORT` | Server port (default: 8080) |
 | `KNOWLEDGE_UPLOAD_DIR` | Knowledge base upload directory |
+| `WECHAT_SUBSCRIBE_MSG_ENABLED` | Enable WeChat subscribe message sending (default: true) |
 
 ## Run Tests
 
