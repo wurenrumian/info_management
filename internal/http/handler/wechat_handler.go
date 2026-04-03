@@ -66,6 +66,12 @@ type devLoginSubscribeCheckReq struct {
 	TemplateData     map[string]interface{} `json:"template_data"`
 }
 
+type publicRegisterReq struct {
+	StudentID string `json:"student_id"`
+	Name      string `json:"name"`
+	Code      string `json:"code"`
+}
+
 func (h *WechatHandler) Login(c *gin.Context) {
 	var req wechatLoginReq
 	if err := c.ShouldBindJSON(&req); err != nil || req.Code == "" {
@@ -181,6 +187,85 @@ func (h *WechatHandler) DevRegisterOrLogin(c *gin.Context) {
 	token, user, err := h.devLogin.RegisterOrLogin(req.StudentID, req.Role)
 	if err != nil {
 		h.writeDevLoginError(c, err, "dev register-or-login failed")
+		return
+	}
+
+	response.OK(c, gin.H{
+		"token": token,
+		"user": gin.H{
+			"id":         user.ID,
+			"student_id": user.StudentID,
+			"name":       user.Name,
+			"role":       user.Role,
+			"class_id":   user.ClassID,
+			"grade":      user.Grade,
+			"major":      user.Major,
+		},
+	})
+}
+
+// PublicRegister handles production/public registration using student_id + name,
+// with optional WeChat code binding.
+func (h *WechatHandler) PublicRegister(c *gin.Context) {
+	var req publicRegisterReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, 400, "invalid body")
+		return
+	}
+
+	studentID := strings.TrimSpace(req.StudentID)
+	name := strings.TrimSpace(req.Name)
+	if studentID == "" || name == "" {
+		response.Error(c, 400, "missing student_id or name")
+		return
+	}
+
+	user, err := h.userRepo.GetByStudentID(studentID)
+	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Error(c, 500, "public register failed")
+			return
+		}
+
+		user = &model.User{
+			StudentID: studentID,
+			Name:      name,
+			Role:      model.RoleStudent,
+		}
+		if err := h.userRepo.Create(user); err != nil {
+			response.Error(c, 500, "public register failed")
+			return
+		}
+	} else {
+		if strings.TrimSpace(user.Name) != name {
+			response.Error(c, 401, "student id and name do not match")
+			return
+		}
+	}
+
+	if code := strings.TrimSpace(req.Code); code != "" {
+		openID, err := h.wechatSvc.CodeToOpenID(code)
+		if err != nil {
+			response.Error(c, 400, "invalid authorization code")
+			return
+		}
+
+		existing, _ := h.userRepo.GetByOpenID(openID)
+		if existing != nil && existing.ID != user.ID {
+			response.Error(c, 409, "this wechat account is already bound to another user")
+			return
+		}
+
+		if err := h.userRepo.UpdateByID(user.ID, map[string]any{"open_id": openID}); err != nil {
+			response.Error(c, 500, "bind failed")
+			return
+		}
+		user.OpenID = &openID
+	}
+
+	token, err := jwtauth.GenerateToken(user.ID, user.Role, user.ClassID, user.Grade, h.jwtSecret)
+	if err != nil {
+		response.Error(c, 500, "generate token failed")
 		return
 	}
 

@@ -6,7 +6,7 @@
 
 ## Authentication
 
-All endpoints (except `/wechat/login`, `/wechat/bind`, `/wechat/callback`, and `/dev/register-or-login`) require a JWT token in the `Authorization` header:
+All endpoints (except `/auth/public-register`, `/wechat/login`, `/wechat/bind`, `/wechat/callback`, `/dev/register-or-login`, and `/dev/login-and-send-subscribe-check`) require a JWT token in the `Authorization` header:
 
 ```
 Authorization: Bearer <token>
@@ -39,10 +39,12 @@ Token payload contains: `sub` (user ID), `role`, `class_id`, `grade`.
 
 ## WeChat Endpoints
 
+- `POST /api/v1/auth/public-register` — 无需认证
 - `POST /api/v1/wechat/login` — 无需认证
 - `POST /api/v1/wechat/bind` — 可选认证
 - `POST /api/v1/wechat/callback` — 无需认证（微信服务器回调）
 - `POST /api/v1/dev/register-or-login` — 仅开发环境启用
+- `POST /api/v1/dev/login-and-send-subscribe-check` — 仅开发环境启用
 
 ## File Endpoints
 
