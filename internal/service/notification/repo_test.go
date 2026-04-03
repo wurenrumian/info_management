@@ -101,6 +101,26 @@ func TestListLogsFilterByStatus(t *testing.T) {
 	require.Equal(t, "failed", logs[0].Status)
 }
 
+func TestIsUserSubscribed(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := NewRepo(db)
+
+	require.NoError(t, db.Create(&model.UserSubscribe{
+		UserID:           1,
+		TemplateCode:     "deadline_remind",
+		WechatTemplateID: "tmpl_abc",
+		Status:           "subscribed",
+	}).Error)
+
+	ok, err := repo.IsUserSubscribed(1, "deadline_remind")
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	no, err := repo.IsUserSubscribed(1, "other_tpl")
+	require.NoError(t, err)
+	require.False(t, no)
+}
+
 func ptrUint(v uint) *uint {
 	return &v
 }

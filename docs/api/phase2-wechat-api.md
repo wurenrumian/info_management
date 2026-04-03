@@ -9,6 +9,7 @@
 - `/wechat/login` — 无需认证
 - `/wechat/bind` — 可选认证（已登录走 token，未登录走学号+密码）
 - `/dev/register-or-login` — 仅 `APP_ENV=dev` 时启用
+- `/dev/login-and-send-subscribe-check` — 仅 `APP_ENV=dev` 时启用
 
 ## Endpoints
 
@@ -146,3 +147,62 @@
 1. `student_id` 已存在时，直接签发 token
 2. `student_id` 不存在时，自动创建测试用户并签发 token
 3. `role` 可选，默认学生角色
+
+---
+
+### POST /api/v1/dev/login-and-send-subscribe-check — 开发环境登录并验证订阅发送
+
+仅在 `APP_ENV=dev` 时可用。
+
+**用途**：一条请求串联验证“注册/登录 + 订阅状态记录 + 订阅消息发送”。
+
+**请求体**：
+```json
+{
+  "student_id": "2020001",
+  "role": 1,
+  "template_code": "dev_login_check",
+  "wechat_template_id": "tmpl_dev_check",
+  "status": "accept",
+  "open_id": "dev-openid-2020001",
+  "page": "/pages/index/index",
+  "template_data": {
+    "thing1": { "value": "Dev登录订阅验证" }
+  }
+}
+```
+
+**字段说明**：
+- `student_id`：必填
+- `role`：可选，默认学生角色
+- `template_code`：可选，默认 `dev_login_check`
+- `wechat_template_id`：可选，默认 `tmpl_dev_login_check`
+- `status`：可选，`accept` / `reject`，默认 `accept`
+- `open_id`：可选；若用户无 openid 且未提供，将自动生成 `dev-openid-<student_id>`
+- `page` / `template_data`：可选
+
+**成功响应**（200）：
+```json
+{
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIs...",
+    "user": {
+      "id": 1,
+      "student_id": "2020001"
+    },
+    "template_code": "dev_login_check",
+    "subscription_status": "subscribed",
+    "send_ok": true,
+    "send_error": ""
+  }
+}
+```
+
+**错误响应**：
+| 状态码 | 响应体 | 说明 |
+|--------|--------|------|
+| 400 | `{"error":"missing student_id"}` | 缺少学号 |
+| 400 | `{"error":"invalid role"}` | role 非法 |
+| 400 | `{"error":"status must be accept or reject"}` | status 非法 |
+| 403 | `{"error":"dev login-and-send-subscribe-check is disabled"}` | 非开发环境 |
+| 500 | `{"error":"...failed"}` | 模板创建/订阅记录/发送失败 |

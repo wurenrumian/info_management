@@ -39,6 +39,12 @@ func TestSendSuccess(t *testing.T) {
 		Fields:           `{"thing1":"事项"}`,
 	}
 	require.NoError(t, repo.CreateTemplate(tmpl))
+	require.NoError(t, db.Create(&model.UserSubscribe{
+		UserID:           1,
+		TemplateCode:     "test_remind",
+		WechatTemplateID: "tmpl_123",
+		Status:           "subscribed",
+	}).Error)
 
 	mockWechat := &mockWechatClient{sendErr: nil}
 	mockUsers := &mockUserRepo{openID: "openid_123", err: nil}
@@ -72,6 +78,12 @@ func TestSendNoOpenID(t *testing.T) {
 		Fields:           `{"thing1":"事项"}`,
 	}
 	require.NoError(t, repo.CreateTemplate(tmpl))
+	require.NoError(t, db.Create(&model.UserSubscribe{
+		UserID:           1,
+		TemplateCode:     "test_remind",
+		WechatTemplateID: "tmpl_123",
+		Status:           "subscribed",
+	}).Error)
 
 	mockWechat := &mockWechatClient{}
 	mockUsers := &mockUserRepo{openID: "", err: nil}
@@ -84,6 +96,31 @@ func TestSendNoOpenID(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no openid")
+}
+
+func TestSendFailsWhenUserNotSubscribed(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := NewRepo(db)
+
+	tmpl := &model.NotificationTemplate{
+		Code:             "test_remind",
+		WechatTemplateID: "tmpl_123",
+		Name:             "测试提醒",
+		Fields:           `{"thing1":"事项"}`,
+	}
+	require.NoError(t, repo.CreateTemplate(tmpl))
+
+	mockWechat := &mockWechatClient{}
+	mockUsers := &mockUserRepo{openID: "openid_123"}
+
+	svc := NewService(mockWechat, repo, mockUsers)
+
+	err := svc.Send(context.Background(), SendRequest{
+		UserID:       1,
+		TemplateCode: "test_remind",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not subscribed")
 }
 
 func TestSendTemplateNotFound(t *testing.T) {
@@ -113,6 +150,12 @@ func TestSendWechatError(t *testing.T) {
 		Fields:           `{"thing1":"事项"}`,
 	}
 	require.NoError(t, repo.CreateTemplate(tmpl))
+	require.NoError(t, db.Create(&model.UserSubscribe{
+		UserID:           1,
+		TemplateCode:     "test_remind",
+		WechatTemplateID: "tmpl_123",
+		Status:           "subscribed",
+	}).Error)
 
 	mockWechat := &mockWechatClient{sendErr: errors.New("wechat error 43004")}
 	mockUsers := &mockUserRepo{openID: "openid_123"}
@@ -141,6 +184,14 @@ func TestSendBatch(t *testing.T) {
 		Fields:           `{"thing1":"事项"}`,
 	}
 	require.NoError(t, repo.CreateTemplate(tmpl))
+	for _, uid := range []uint{1, 2, 3} {
+		require.NoError(t, db.Create(&model.UserSubscribe{
+			UserID:           uid,
+			TemplateCode:     "test_remind",
+			WechatTemplateID: "tmpl_123",
+			Status:           "subscribed",
+		}).Error)
+	}
 
 	mockWechat := &mockWechatClient{}
 	mockUsers := &mockUserRepo{openID: "openid_123"}

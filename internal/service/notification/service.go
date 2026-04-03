@@ -20,6 +20,7 @@ type RepoInterface interface {
 	GetTemplateByCode(code string) (*model.NotificationTemplate, error)
 	CreateTemplate(t *model.NotificationTemplate) error
 	CreateLog(log *model.NotificationLog) error
+	IsUserSubscribed(userID uint, templateCode string) (bool, error)
 	CountUnreadByUser(userID uint) (int64, error)
 	ListLogs(filter LogFilter) ([]model.NotificationLog, int64, error)
 }
@@ -68,6 +69,16 @@ func (s *Service) Send(ctx context.Context, req SendRequest) error {
 	tmpl, err := s.repo.GetTemplateByCode(req.TemplateCode)
 	if err != nil {
 		return fmt.Errorf("get template %s: %w", req.TemplateCode, err)
+	}
+
+	subscribed, err := s.repo.IsUserSubscribed(req.UserID, req.TemplateCode)
+	if err != nil {
+		s.recordLog(req, "failed", fmt.Sprintf("check subscription: %v", err))
+		return fmt.Errorf("check user subscription: %w", err)
+	}
+	if !subscribed {
+		s.recordLog(req, "failed", "user not subscribed")
+		return fmt.Errorf("user %d is not subscribed to template %s", req.UserID, req.TemplateCode)
 	}
 
 	openID, err := s.userRepo.GetUserOpenID(req.UserID)

@@ -28,7 +28,6 @@ func TestWechatLoginReturnsDataEnvelope(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&model.Class{}, &model.User{}))
-	require.NoError(t, db.Exec("ALTER TABLE users ADD COLUMN openid TEXT").Error)
 
 	openID := "openid-123"
 	require.NoError(t, db.Create(&model.User{
@@ -39,10 +38,10 @@ func TestWechatLoginReturnsDataEnvelope(t *testing.T) {
 		ClassID:   1,
 		Grade:     "2023",
 		Major:     "CS",
+		OpenID:    &openID,
 	}).Error)
-	require.NoError(t, db.Exec("UPDATE users SET openid = ? WHERE id = ?", openID, 1).Error)
 
-	h := NewWechatHandler(db, "", "", "test-secret")
+	h := NewWechatHandler(db, "", "", "test-secret", nil)
 	h.wechatSvc = wechat.NewServiceWithBaseURL("", "", mockWechat.URL)
 
 	r := gin.New()

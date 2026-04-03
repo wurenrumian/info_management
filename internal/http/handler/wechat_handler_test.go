@@ -19,7 +19,7 @@ func setupWechatTestRouter(t *testing.T) (*gorm.DB, http.Handler) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Class{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Class{}, &model.NotificationTemplate{}, &model.NotificationLog{}, &model.UserSubscribe{}))
 	require.NoError(t, db.Create(&model.Class{
 		ID:        1,
 		ClassName: "Class 1",
@@ -152,4 +152,55 @@ func TestDevRegisterOrLoginForbiddenWhenDisabled(t *testing.T) {
 
 	require.Equal(t, http.StatusForbidden, w.Code)
 	require.Contains(t, w.Body.String(), "dev register-or-login is disabled")
+}
+
+func TestDevLoginAndSendSubscribeCheckForbiddenWhenDisabled(t *testing.T) {
+	original, had := os.LookupEnv("APP_ENV")
+	if had {
+		t.Cleanup(func() { _ = os.Setenv("APP_ENV", original) })
+	} else {
+		t.Cleanup(func() { _ = os.Unsetenv("APP_ENV") })
+	}
+	_ = os.Unsetenv("APP_ENV")
+
+	_, r := setupWechatTestRouter(t)
+
+	body := []byte(`{"student_id":"S100"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/dev/login-and-send-subscribe-check", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusForbidden, w.Code)
+	require.Contains(t, w.Body.String(), "dev login-and-send-subscribe-check is disabled")
+}
+
+func TestDevLoginAndSendSubscribeCheckCreatesSubscription(t *testing.T) {
+	t.Setenv("APP_ENV", "dev")
+	t.Setenv("WECHAT_SUBSCRIBE_MSG_ENABLED", "false")
+
+	db, r := setupWechatTestRouter(t)
+
+	body := []byte(`{"student_id":"S100","template_code":"dev_login_check","wechat_template_id":"tmpl_dev_check","status":"accept","open_id":"dev-openid-s100"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/dev/login-and-send-subscribe-check", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), `"token"`)
+	require.Contains(t, w.Body.String(), `"send_ok":true`)
+
+	var tmpl model.NotificationTemplate
+	require.NoError(t, db.Where("code = ?", "dev_login_check").First(&tmpl).Error)
+	require.Equal(t, "tmpl_dev_check", tmpl.WechatTemplateID)
+
+	var sub model.UserSubscribe
+	require.NoError(t, db.Where("user_id = ? AND template_code = ?", 100, "dev_login_check").First(&sub).Error)
+	require.Equal(t, "subscribed", sub.Status)
+
+	var user model.User
+	require.NoError(t, db.Where("id = ?", 100).First(&user).Error)
+	require.NotNil(t, user.OpenID)
+	require.Equal(t, "dev-openid-s100", *user.OpenID)
 }

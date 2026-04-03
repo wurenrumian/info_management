@@ -35,6 +35,18 @@ func (r *Repo) CreateLog(log *model.NotificationLog) error {
 	return r.db.Create(log).Error
 }
 
+// IsUserSubscribed returns true when the user has an active subscription for the template code.
+func (r *Repo) IsUserSubscribed(userID uint, templateCode string) (bool, error) {
+	var total int64
+	err := r.db.Model(&model.UserSubscribe{}).
+		Where("user_id = ? AND template_code = ? AND status = ?", userID, templateCode, "subscribed").
+		Count(&total).Error
+	if err != nil {
+		return false, err
+	}
+	return total > 0, nil
+}
+
 // CountUnreadByUser returns the number of unread notifications for a user.
 func (r *Repo) CountUnreadByUser(userID uint) (int64, error) {
 	var total int64

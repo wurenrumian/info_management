@@ -43,3 +43,27 @@ func TestUserRepoListByScope(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, none, 0)
 }
+
+func TestUserRepoGetByOpenIDUsesOpenIDColumn(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.Class{}, &model.User{}))
+
+	openID := "wx-openid-1"
+	require.NoError(t, db.Create(&model.User{
+		ID:        10,
+		StudentID: "S10",
+		Name:      "u10",
+		Role:      1,
+		ClassID:   1,
+		Grade:     "2023",
+		OpenID:    &openID,
+	}).Error)
+
+	r := repo.NewUserRepo(db)
+	user, err := r.GetByOpenID(openID)
+	require.NoError(t, err)
+	require.Equal(t, uint(10), user.ID)
+	require.NotNil(t, user.OpenID)
+	require.Equal(t, openID, *user.OpenID)
+}

@@ -39,10 +39,12 @@ func New(db *gorm.DB) *gin.Engine {
 
 	api := r.Group("/api/v1")
 
-	wechatHandler := handler.NewWechatHandler(db, appID, appSecret, jwtSecret)
+	notifSvc := initNotificationSvc(db)
+	wechatHandler := handler.NewWechatHandler(db, appID, appSecret, jwtSecret, notifSvc)
 	api.POST("/wechat/login", wechatHandler.Login)
 	api.POST("/wechat/bind", middleware.OptionalJWTAuth(jwtSecret), wechatHandler.Bind)
 	api.POST("/dev/register-or-login", wechatHandler.DevRegisterOrLogin)
+	api.POST("/dev/login-and-send-subscribe-check", wechatHandler.DevLoginAndSendSubscribeCheck)
 
 	subscribeHandler := handler.NewSubscribeHandler(db)
 	api.POST("/wechat/callback", subscribeHandler.WechatCallback)
@@ -90,7 +92,6 @@ func New(db *gorm.DB) *gin.Engine {
 	admin.DELETE("/knowledge/:id", adminKnowledgeHandler.DeleteKnowledge)
 
 	// Notification routes
-	notifSvc := initNotificationSvc(db)
 	notifHandler := handler.NewNotificationHandler(notifSvc)
 
 	admin.POST("/notification/templates", notifHandler.CreateTemplate)

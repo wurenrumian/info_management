@@ -50,6 +50,7 @@ WeChat endpoints:
 - `POST /api/v1/wechat/login` — no auth required, returns JWT token
 - `POST /api/v1/wechat/bind` — optional auth (with token binds to current user, without token requires `student_id` + `password`)
 - `POST /api/v1/dev/register-or-login` — dev only, returns JWT and creates a test user when missing
+- `POST /api/v1/dev/login-and-send-subscribe-check` — dev only, login/register + upsert subscription + attempt one subscribe send
 
 ## Environment Variables
 
