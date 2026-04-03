@@ -146,12 +146,12 @@ POST /api/v1/user/subscribe/report
 |------|------|------|------|
 | `template_code` | string | 是 | 模板业务标识，如 `deadline_remind` |
 | `wechat_template_id` | string | 是 | 微信后台配置的模板 ID |
-| `status` | string | 是 | `accept`（同意）或 `reject`（拒绝） |
+| `status` | string | 是 | `accept`（同意）、`reject`（拒绝）、`ban`（后台封禁）、`filter`（同名模板被过滤） |
 
 **响应**：
 
 - `200 OK`：`{"data": {"ok": true}}`
-- `400 Bad Request`：参数错误或 status 值非法
+- `400 Bad Request`：参数错误或 status 值非法（仅支持 `accept/reject/ban/filter`）
 - `401 Unauthorized`：未登录
 
 **示例**：
@@ -188,6 +188,7 @@ POST /api/v1/wechat/callback
 |-------|------|
 | `subscribe_msg_popup_event` | 用户弹窗选择订阅/拒绝 |
 | `subscribe_msg_change_event` | 用户在设置中修改订阅状态 |
+| `subscribe_msg_sent_event` | 订阅消息下发结果事件（异步推送） |
 
 ---
 

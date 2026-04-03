@@ -44,14 +44,10 @@ func (h *SubscribeHandler) ReportSubscribe(c *gin.Context) {
 		return
 	}
 
-	if req.Status != "accept" && req.Status != "reject" {
-		response.Error(c, 400, "status must be accept or reject")
+	status, ok := mapSubscribeStatus(req.Status)
+	if !ok {
+		response.Error(c, 400, "status must be accept, reject, ban or filter")
 		return
-	}
-
-	status := "subscribed"
-	if req.Status == "reject" {
-		status = "unsubscribed"
 	}
 
 	var existing model.UserSubscribe
@@ -99,6 +95,12 @@ type wechatEventXML struct {
 		TemplateID            string `xml:"TemplateId"`
 		SubscribeStatusString string `xml:"SubscribeStatusString"`
 	} `xml:"SubscribeMsgChangeEvent>List"`
+	SentEventList []struct {
+		TemplateID  string `xml:"TemplateId"`
+		MsgID       string `xml:"MsgID"`
+		ErrorCode   string `xml:"ErrorCode"`
+		ErrorStatus string `xml:"ErrorStatus"`
+	} `xml:"SubscribeMsgSentEvent>List"`
 }
 
 // WechatCallback handles POST /api/v1/wechat/callback (WeChat server push).
@@ -125,6 +127,11 @@ func (h *SubscribeHandler) WechatCallback(c *gin.Context) {
 		for _, item := range event.ChangeEventList {
 			h.updateSubscribeByOpenID(event.FromUserName, item.TemplateID, item.SubscribeStatusString)
 		}
+	case "subscribe_msg_sent_event":
+		for _, item := range event.SentEventList {
+			log.Printf("wechat sent callback: openid=%s template=%s msg_id=%s error_code=%s error_status=%s",
+				event.FromUserName, item.TemplateID, item.MsgID, item.ErrorCode, item.ErrorStatus)
+		}
 	}
 
 	c.String(200, "success")
@@ -137,9 +144,10 @@ func (h *SubscribeHandler) updateSubscribeByOpenID(openID, templateID, statusStr
 		return
 	}
 
-	status := "subscribed"
-	if statusStr == "reject" {
-		status = "unsubscribed"
+	status, ok := mapSubscribeStatus(statusStr)
+	if !ok {
+		log.Printf("updateSubscribeByOpenID: unknown status %q for user %d template %s", statusStr, user.ID, templateID)
+		return
 	}
 
 	if err := h.db.Model(&model.UserSubscribe{}).
@@ -149,5 +157,20 @@ func (h *SubscribeHandler) updateSubscribeByOpenID(openID, templateID, statusStr
 			"updated_at": time.Now(),
 		}).Error; err != nil {
 		log.Printf("updateSubscribeByOpenID: update failed for user %d, template %s: %v", user.ID, templateID, err)
+	}
+}
+
+func mapSubscribeStatus(raw string) (string, bool) {
+	switch raw {
+	case "accept", "acceptWithAudio", "acceptWithAlert":
+		return "subscribed", true
+	case "reject":
+		return "unsubscribed", true
+	case "ban":
+		return "banned", true
+	case "filter":
+		return "filtered", true
+	default:
+		return "", false
 	}
 }

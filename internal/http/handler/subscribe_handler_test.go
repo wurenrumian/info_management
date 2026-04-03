@@ -81,6 +81,45 @@ func TestReportSubscribeInvalidStatus(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+func TestReportSubscribeBanAndFilter(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	h := NewSubscribeHandler(db)
+	actor := auth.Actor{UserID: 1, Role: 1}
+
+	// ban
+	ctxBan, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctxBan.Set("actor", actor)
+	ctxBan.Request = httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(
+		mustJSON(map[string]string{
+			"template_code":      "test_tpl",
+			"wechat_template_id": "tmpl_1",
+			"status":             "ban",
+		}),
+	))
+	ctxBan.Request.Header.Set("Content-Type", "application/json")
+	h.ReportSubscribe(ctxBan)
+
+	var sub model.UserSubscribe
+	require.NoError(t, db.Where("user_id = ? AND template_code = ?", 1, "test_tpl").First(&sub).Error)
+	require.Equal(t, "banned", sub.Status)
+
+	// filter
+	ctxFilter, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctxFilter.Set("actor", actor)
+	ctxFilter.Request = httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(
+		mustJSON(map[string]string{
+			"template_code":      "test_tpl",
+			"wechat_template_id": "tmpl_1",
+			"status":             "filter",
+		}),
+	))
+	ctxFilter.Request.Header.Set("Content-Type", "application/json")
+	h.ReportSubscribe(ctxFilter)
+
+	require.NoError(t, db.Where("user_id = ? AND template_code = ?", 1, "test_tpl").First(&sub).Error)
+	require.Equal(t, "filtered", sub.Status)
+}
+
 func TestReportSubscribeIdempotent(t *testing.T) {
 	db := testutil.NewTestDB(t)
 	h := NewSubscribeHandler(db)
@@ -178,6 +217,38 @@ func TestWechatCallbackChangeEvent(t *testing.T) {
 	var sub model.UserSubscribe
 	db.Where("wechat_template_id = ?", "tmpl_abc").First(&sub)
 	require.Equal(t, "unsubscribed", sub.Status)
+}
+
+func TestWechatCallbackSentEventXML(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	db.Create(&model.User{ID: 1, OpenID: ptrStr("test_openid")})
+
+	h := NewSubscribeHandler(db)
+	r := gin.New()
+	r.POST("/wechat/callback", h.WechatCallback)
+
+	xmlBody := `<xml>
+		<ToUserName><![CDATA[gh_123]]></ToUserName>
+		<FromUserName><![CDATA[test_openid]]></FromUserName>
+		<CreateTime>1610969440</CreateTime>
+		<MsgType><![CDATA[event]]></MsgType>
+		<Event><![CDATA[subscribe_msg_sent_event]]></Event>
+		<SubscribeMsgSentEvent>
+			<List>
+				<TemplateId><![CDATA[tmpl_abc]]></TemplateId>
+				<MsgID><![CDATA[msg_1]]></MsgID>
+				<ErrorCode>0</ErrorCode>
+				<ErrorStatus><![CDATA[ok]]></ErrorStatus>
+			</List>
+		</SubscribeMsgSentEvent>
+	</xml>`
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/wechat/callback", bytes.NewReader([]byte(xmlBody)))
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, "success", w.Body.String())
 }
 
 func mustJSON(v any) []byte {
