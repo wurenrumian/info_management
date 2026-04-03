@@ -1,154 +1,127 @@
 # Manage Backend
 
-第二阶段已完成，当前除 Foundation RBAC 外，已支持文件上传下载、知识库检索与管理接口、微信 OpenID 绑定与登录、通知能力。
+## 项目简介
 
-## Phase 1 Delivered
+`Manage Backend` 是一个面向校园/组织管理场景的后端服务，提供统一的用户身份体系、权限控制、文件管理、知识库检索与微信相关能力。
 
-- Core models: `users` / `classes` / `admin_logs`
-- 4-level RBAC actions + scope filtering
-- JWT-based identity middleware
-- Student endpoint: `GET /api/v1/me`
-- Admin endpoints:
-- `GET /api/v1/admin/users`
-- `GET /api/v1/admin/users/:id`
-- `PATCH /api/v1/admin/users/:id`
-- `GET /api/v1/admin/classes`
-- `GET /api/v1/admin/classes/:id`
-- `POST /api/v1/admin/classes`
-- `PATCH /api/v1/admin/classes/:id`
-- `GET /api/v1/admin/logs`
+项目目标：
+- 提供稳定的 REST API 作为前后端协作契约
+- 通过 RBAC + Scope 控制不同角色的数据访问边界
+- 支持知识库与文件等高频业务能力的快速落地
 
-## Phase 2 Delivered
+## 核心能力
 
-- Knowledge base search and management
-- WeChat OpenID binding and login:
-- `POST /api/v1/wechat/login` — 微信登录（code → openid → JWT）
-- `POST /api/v1/wechat/bind` — 绑定 openid
+- 身份认证与权限控制
+- JWT 身份体系（`sub/role/class_id/grade`）
+- 4 级角色权限与 Scope 数据过滤
 
-## Run Server
+- 用户与班级管理
+- 用户信息查询与更新
+- 班级管理与管理员审计日志
+
+- 文件管理
+- 上传、列表、详情、下载、删除
+- 统一文件目录配置（`DOCUMENT_UPLOAD_DIR`）
+
+- 知识库
+- 知识检索（学生侧）
+- 知识增删改查与附件导入（管理侧）
+
+- 微信相关
+- 微信登录与绑定
+- 公共注册、开发环境登录辅助
+- 订阅上报与通知能力（按配置开关）
+
+## 技术栈
+
+- Go 1.25.0
+- Gin
+- GORM
+- PostgreSQL / Kingbase（生产与联调）
+- SQLite in-memory（测试）
+
+## 快速开始
+
+### 1) 配置环境变量
 
 ```bash
-# copy .env.example to .env and fill in your values
 cp .env.example .env
+```
 
-# optional: DATABASE_DSN for postgres/kingbase-compatible db
-# if DATABASE_DSN is empty, app still starts, but db-backed APIs are unavailable
+关键变量：
+- `DATABASE_DSN`
+- `JWT_SECRET`
+- `WECHAT_APP_ID` / `WECHAT_APP_SECRET`
+- `DOCUMENT_UPLOAD_DIR`
+- `APP_ENV`（`dev` 时启用开发辅助接口）
+
+### 2) 启动服务
+
+```bash
 go run ./cmd/server
 ```
 
-## Authentication (JWT)
+默认端口：`8080`（可通过 `PORT` 覆盖）。
 
-All `/api/v1/*` routes (except public/dev auth endpoints) require a JWT token:
+## 认证说明
 
-```
+`/api/v1/*` 路由默认需要 JWT（少数 public/dev 接口除外）：
+
+```text
 Authorization: Bearer <token>
 ```
 
-Token claims: `sub` (user ID), `role`, `class_id`, `grade`.
+常用认证相关接口：
+- `POST /api/v1/auth/public-register`
+- `POST /api/v1/wechat/login`
+- `POST /api/v1/wechat/bind`
+- `POST /api/v1/dev/register-or-login`（仅 dev）
+- `POST /api/v1/dev/login-and-send-subscribe-check`（仅 dev）
 
-Auth-related endpoints:
-- `POST /api/v1/auth/public-register` — no auth required, public registration + JWT
-- `POST /api/v1/wechat/login` — no auth required, returns JWT token
-- `POST /api/v1/wechat/bind` — optional auth (with token binds to current user, without token requires `student_id` + `password`)
-- `POST /api/v1/dev/register-or-login` — dev only, returns JWT and creates a test user when missing
-- `POST /api/v1/dev/login-and-send-subscribe-check` — dev only, login/register + upsert subscription + attempt one subscribe send
-
-## Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `JWT_SECRET` | JWT signing key (required in production) |
-| `WECHAT_APP_ID` | WeChat Mini Program AppID |
-| `WECHAT_APP_SECRET` | WeChat Mini Program AppSecret |
-| `DATABASE_DSN` | Database connection string |
-| `PORT` | Server port (default: 8080) |
-| `DOCUMENT_UPLOAD_DIR` | Unified document upload directory |
-| `KNOWLEDGE_UPLOAD_DIR` | Legacy knowledge upload directory (compat only) |
-| `WECHAT_SUBSCRIBE_MSG_ENABLED` | Enable WeChat subscribe message sending (default: true) |
-| `APP_ENV` | Set to `dev` to enable dev-only auth helpers |
-
-## Dev Login For Frontend
-
-For H5/local integration that should skip WeChat auth:
-
-```bash
-export APP_ENV=dev
-go run ./cmd/server
-```
-
-Then request a token with:
-
-```bash
-./scripts/dev/dev_login_curl.sh
-```
-
-Optional overrides:
-
-```bash
-BASE_URL=http://127.0.0.1:8080 STUDENT_ID=2020002 ROLE=2 ./scripts/dev/dev_login_curl.sh
-```
-
-To load the token into your current shell:
-
-```bash
-source ./scripts/dev/dev_login_export.sh
-```
-
-Behavior:
-- existing `student_id`: returns a JWT for that user
-- missing `student_id`: creates a dev test user and returns a JWT
-- non-dev environment: returns `403`
-
-## Run Tests
+## 测试与质量检查
 
 ```bash
 go test ./... -count=1
+go vet ./...
 ```
 
-## API Documentation
+## API 文档
 
-- `docs/api/phase1-foundation-api.md`
-- `docs/api/phase2-files-api.md`
-- `docs/api/phase2-knowledge-api.md`
-- `docs/api/phase2-wechat-api.md`
-- `docs/api/phase2-partyflow-api.md` (v0 placeholder)
-- `docs/api/phase2-approvals-api.md` (v0 placeholder)
-- `docs/api/phase2-announcements-api.md` (v0 placeholder)
+详见 `docs/api/`：
+- `phase1-foundation-api.md`
+- `phase2-files-api.md`
+- `phase2-knowledge-api.md`
+- `phase2-wechat-api.md`
+- `notification-api.md`
 
-## Knowledge Base Demo (Phase 2)
+## 项目目录（简版）
 
+```text
+cmd/server                 # 进程入口
+internal/http              # handler/middleware/router
+internal/service           # 业务服务
+internal/repo              # 数据访问层
+internal/model             # 数据模型
+scripts/dev                # 本地联调脚本
+```
+
+## 本地联调脚本（补充）
+
+这些脚本是开发辅助，不是 README 主体。
+
+推荐顺序：
 ```bash
-# 1) 启动服务（需先设置 DATABASE_DSN）
-go run ./cmd/server
-
-# 2) 安装系统依赖（PDF提取需要）
-sudo apt-get install -y poppler-utils
-
-# 3) 生成联调附件（含 docx/xlsx/pdf）
-./scripts/dev/make_demo_knowledge_files.sh /tmp
-
-# 4) 调用导入/检索/管理接口（含PDF正文搜索验证）
-./scripts/dev/knowledge_api_curl.sh
+source ./scripts/dev/export.sh
+./scripts/dev/prepare_upload_dirs.sh
 ```
 
-## Kingbase Local Test (Docker)
+常用脚本：
+- `scripts/dev/dev_login_curl.sh`：获取 dev token
+- `scripts/dev/upload_api_curl.sh`：文件上传链路联调
+- `scripts/dev/make_demo_knowledge_files.sh`：生成知识库导入样例文件
+- `scripts/dev/knowledge_api_curl.sh`：知识库全链路联调
 
-```bash
-# 1) 启动本地金仓容器（个人脚本）
-./scripts/dev/kingbase_docker_up.sh
+## 相关规范
 
-# 2) 设置连接串
-export DATABASE_DSN='host=127.0.0.1 port=54321 user=system password=123456 dbname=test sslmode=disable'
-
-# 3) 启动服务并执行接口联调
-go run ./cmd/server
-./scripts/dev/make_demo_knowledge_files.sh /tmp
-./scripts/dev/knowledge_api_curl.sh
-```
-
-## Team Workflow (Superpowers Optional)
-
-- Superpowers is recommended for planning/execution consistency, but not required to run this project.
-- Runtime/development baseline remains standard Go commands (`go run`, `go test`) with no superpowers runtime dependency.
-- Team-shared artifacts can be committed under `docs/superpowers/` (designs/plans) when they improve collaboration.
-- Personal local config (for example user-home codex/superpowers settings) must not be committed.
+- 开发规范：`docs/development-standard.md`
+- API 契约：`docs/api/`
