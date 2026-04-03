@@ -89,3 +89,40 @@ func TestAdminLogsOnlySuperAdmin(t *testing.T) {
 	require.Equal(t, http.StatusOK, w2.Code)
 	require.Contains(t, w2.Body.String(), "seed")
 }
+
+func TestPatchClassUpdatesUsersGradeWhenGradeChanged(t *testing.T) {
+	db, r := setupClassTestRouter(t)
+
+	require.NoError(t, db.Create(&model.User{
+		ID:        100,
+		StudentID: "S100",
+		Name:      "u100",
+		Role:      model.RoleStudent,
+		ClassID:   1,
+		Grade:     "2023",
+	}).Error)
+	require.NoError(t, db.Create(&model.User{
+		ID:        101,
+		StudentID: "S101",
+		Name:      "u101",
+		Role:      model.RoleStudent,
+		ClassID:   1,
+		Grade:     "2023",
+	}).Error)
+
+	body := []byte(`{"grade":"2024"}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/classes/1", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	token := testutil.GenerateTestToken(999, model.RoleSuperAdmin, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var users []model.User
+	require.NoError(t, db.Where("class_id = ?", 1).Find(&users).Error)
+	require.Len(t, users, 2)
+	require.Equal(t, "2024", users[0].Grade)
+	require.Equal(t, "2024", users[1].Grade)
+}

@@ -29,6 +29,12 @@ func setupMeTestRouter(t *testing.T) (*gorm.DB, http.Handler) {
 		Role:      model.RoleStudent,
 		ClassID:   1,
 		Grade:     "2023",
+		Major:     "计算机科学与技术",
+		ProfileAttrs: datatypes.JSON([]byte(`{
+			"nickname":"阿三",
+			"bio":"保持热爱，奔赴山海",
+			"avatar_url":"https://example.com/avatar-old.png"
+		}`)),
 	}).Error)
 	require.NoError(t, db.Create(&model.User{
 		ID:        101,
@@ -55,6 +61,30 @@ func TestGetMeReturnsSelf(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Body.String(), "S100")
 	require.NotContains(t, w.Body.String(), "S101")
+}
+
+func TestGetMeReturnsProfileFields(t *testing.T) {
+	_, r := setupMeTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+	token := testutil.GenerateTestToken(100, model.RoleStudent, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp struct {
+		Data map[string]any `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Equal(t, "张三", resp.Data["real_name"])
+	require.Equal(t, "阿三", resp.Data["nickname"])
+	require.Equal(t, "计算机科学与技术", resp.Data["major"])
+	require.Equal(t, "保持热爱，奔赴山海", resp.Data["bio"])
+	require.Equal(t, "https://example.com/avatar-old.png", resp.Data["avatar_url"])
+	require.Contains(t, resp.Data, "college")
+	require.Contains(t, resp.Data, "enrollment_year")
 }
 
 func TestGetMeReturnsTeacherSelfInsteadOfFirstScopedUser(t *testing.T) {
@@ -187,10 +217,17 @@ func TestGetProfileHomeReturnsAggregatedData(t *testing.T) {
 	require.False(t, resp.Data.Account.WechatBound)
 }
 
-func TestPatchMeUpdatesProfileAttrs(t *testing.T) {
+func TestPatchMeUpdatesColumnsAndProfileAttrs(t *testing.T) {
 	db, r := setupMeTestRouter(t)
 
-	body := []byte(`{"avatar_url":"https://example.com/avatar.png","bio":"个人简介"}`)
+	body := []byte(`{
+		"nickname":"阿三同学",
+		"major":"人工智能",
+		"college":"信息学院",
+		"enrollment_year":2023,
+		"avatar_url":"https://example.com/avatar.png",
+		"bio":"个人简介"
+	}`)
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/me", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(100, 1, 1, "2023"))
 	req.Header.Set("Content-Type", "application/json")
@@ -198,19 +235,24 @@ func TestPatchMeUpdatesProfileAttrs(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), `"ok":true`)
 
 	var user model.User
 	require.NoError(t, db.First(&user, 100).Error)
+	require.Equal(t, "人工智能", user.Major)
 
-	var attrs map[string]string
+	var attrs map[string]any
 	require.NoError(t, json.Unmarshal([]byte(user.ProfileAttrs), &attrs))
+	require.Equal(t, "阿三同学", attrs["nickname"])
 	require.Equal(t, "https://example.com/avatar.png", attrs["avatar_url"])
 	require.Equal(t, "个人简介", attrs["bio"])
 
 	require.NoError(t, db.Model(&model.User{}).Where("id = ?", 100).Update("profile_attrs", datatypes.JSON([]byte(`{"avatar_url":"old","bio":"old","theme":"blue"}`))).Error)
 
-	body = []byte(`{"avatar_url":"new-avatar","bio":"new-bio"}`)
+	body = []byte(`{
+		"nickname":"new-nickname",
+		"avatar_url":"https://example.com/new-avatar.png",
+		"bio":"new-bio"
+	}`)
 	req = httptest.NewRequest(http.MethodPatch, "/api/v1/me", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(100, 1, 1, "2023"))
 	req.Header.Set("Content-Type", "application/json")
@@ -220,7 +262,37 @@ func TestPatchMeUpdatesProfileAttrs(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	require.NoError(t, db.First(&user, 100).Error)
 	require.NoError(t, json.Unmarshal([]byte(user.ProfileAttrs), &attrs))
-	require.Equal(t, "new-avatar", attrs["avatar_url"])
+	require.Equal(t, "https://example.com/new-avatar.png", attrs["avatar_url"])
 	require.Equal(t, "new-bio", attrs["bio"])
+	require.Equal(t, "new-nickname", attrs["nickname"])
 	require.Equal(t, "blue", attrs["theme"])
+}
+
+func TestPatchMeRejectsReadOnlyFields(t *testing.T) {
+	_, r := setupMeTestRouter(t)
+
+	body := []byte(`{"real_name":"新名字"}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/me", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(100, model.RoleStudent, 1, "2023"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.Contains(t, w.Body.String(), `"code":40002`)
+	require.Contains(t, w.Body.String(), "read-only")
+}
+
+func TestPatchMeRejectsInvalidEnrollmentYear(t *testing.T) {
+	_, r := setupMeTestRouter(t)
+
+	body := []byte(`{"enrollment_year":1900}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/me", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(100, model.RoleStudent, 1, "2023"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.Contains(t, w.Body.String(), `"code":40003`)
 }

@@ -13,3 +13,7 @@ func List(c *gin.Context, data any, total int64) {
 func Error(c *gin.Context, status int, msg string) {
 	c.JSON(status, gin.H{"error": msg})
 }
+
+func ErrorWithCode(c *gin.Context, status int, code int, msg string) {
+	c.JSON(status, gin.H{"error": msg, "code": code})
+}

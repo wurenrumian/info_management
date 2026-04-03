@@ -43,7 +43,7 @@ func TestBuildUserResponse(t *testing.T) {
 		Major:     "CS",
 	}
 
-	got := buildUserResponse(user)
+	got := buildUserResponse(user, user.Grade)
 	require.Equal(t, uint(42), got["id"])
 	require.Equal(t, "S042", got["student_id"])
 	require.Equal(t, "Alice", got["name"])

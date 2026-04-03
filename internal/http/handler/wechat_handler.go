@@ -16,6 +16,7 @@ import (
 	"manage/internal/model"
 	"manage/internal/repo"
 	jwtauth "manage/internal/service/auth"
+	gradesvc "manage/internal/service/grade"
 	"manage/internal/service/notification"
 	"manage/internal/service/wechat"
 )
@@ -30,6 +31,7 @@ type WechatHandler struct {
 	userRepo  *repo.UserRepo
 	devLogin  *jwtauth.DevLoginService
 	notifSvc  *notification.Service
+	gradeSvc  *gradesvc.Service
 	db        *gorm.DB
 	jwtSecret string
 }
@@ -40,6 +42,7 @@ func NewWechatHandler(db *gorm.DB, appID, appSecret, jwtSecret string, notifSvc 
 		userRepo:  repo.NewUserRepo(db),
 		devLogin:  jwtauth.NewDevLoginService(db, jwtSecret),
 		notifSvc:  notifSvc,
+		gradeSvc:  gradesvc.NewService(db),
 		db:        db,
 		jwtSecret: jwtSecret,
 	}
@@ -96,15 +99,21 @@ func (h *WechatHandler) Login(c *gin.Context) {
 		return
 	}
 
-	token, err := jwtauth.GenerateToken(user.ID, user.Role, user.ClassID, user.Grade, h.jwtSecret)
+	effectiveGrade, err := h.gradeSvc.ResolveEffectiveGrade(user)
+	if err != nil {
+		response.Error(c, 500, "resolve effective grade failed")
+		return
+	}
+	token, err := jwtauth.GenerateToken(user.ID, user.Role, user.ClassID, effectiveGrade, h.jwtSecret)
 	if err != nil {
 		response.Error(c, 500, "generate token failed")
 		return
 	}
+	user.Grade = effectiveGrade
 
 	response.OK(c, gin.H{
 		"token": token,
-		"user":  buildUserResponse(user),
+		"user":  buildUserResponse(user, effectiveGrade),
 	})
 }
 
@@ -189,7 +198,7 @@ func (h *WechatHandler) DevRegisterOrLogin(c *gin.Context) {
 
 	response.OK(c, gin.H{
 		"token": token,
-		"user":  buildUserResponse(user),
+		"user":  buildUserResponse(user, user.Grade),
 	})
 }
 
@@ -257,15 +266,21 @@ func (h *WechatHandler) PublicRegister(c *gin.Context) {
 		user.OpenID = &openID
 	}
 
-	token, err := jwtauth.GenerateToken(user.ID, user.Role, user.ClassID, user.Grade, h.jwtSecret)
+	effectiveGrade, err := h.gradeSvc.ResolveEffectiveGrade(user)
+	if err != nil {
+		response.Error(c, 500, "resolve effective grade failed")
+		return
+	}
+	token, err := jwtauth.GenerateToken(user.ID, user.Role, user.ClassID, effectiveGrade, h.jwtSecret)
 	if err != nil {
 		response.Error(c, 500, "generate token failed")
 		return
 	}
+	user.Grade = effectiveGrade
 
 	response.OK(c, gin.H{
 		"token": token,
-		"user":  buildUserResponse(user),
+		"user":  buildUserResponse(user, effectiveGrade),
 	})
 }
 
@@ -412,14 +427,14 @@ func (h *WechatHandler) writeDevLoginError(c *gin.Context, err error, fallback s
 	}
 }
 
-func buildUserResponse(user *model.User) gin.H {
+func buildUserResponse(user *model.User, effectiveGrade string) gin.H {
 	return gin.H{
 		"id":         user.ID,
 		"student_id": user.StudentID,
 		"name":       user.Name,
 		"role":       user.Role,
 		"class_id":   user.ClassID,
-		"grade":      user.Grade,
+		"grade":      effectiveGrade,
 		"major":      user.Major,
 	}
 }

@@ -14,6 +14,11 @@ Authorization: Bearer <token>
 
 Token payload contains: `sub` (user ID), `role`, `class_id`, `grade`.
 
+`grade` governance:
+- `classes.grade` is source-of-truth.
+- `users.grade` is system-managed snapshot.
+- `PATCH /api/v1/admin/users/:id` does not accept `grade`.
+
 ## Student Endpoint
 
 - `GET /api/v1/me`
@@ -77,4 +82,60 @@ Token payload contains: `sub` (user ID), `role`, `class_id`, `grade`.
 ```http
 GET /api/v1/admin/users HTTP/1.1
 Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+```
+
+## Profile Examples
+
+### PATCH /api/v1/me (Success)
+
+Request:
+
+```json
+{
+  "nickname": "阿三同学",
+  "major": "人工智能",
+  "college": "信息学院",
+  "enrollment_year": 2023,
+  "bio": "今天也在认真生活",
+  "avatar_url": "https://example.com/avatar/10001.png"
+}
+```
+
+Response:
+
+```json
+{
+  "data": {
+    "id": 10001,
+    "student_id": "2023123456",
+    "real_name": "张三",
+    "nickname": "阿三同学",
+    "role": 1,
+    "major": "人工智能",
+    "college": "信息学院",
+    "enrollment_year": 2023,
+    "bio": "今天也在认真生活",
+    "avatar_url": "https://example.com/avatar/10001.png",
+    "updated_at": "2026-04-03T10:20:30Z"
+  }
+}
+```
+
+### PATCH /api/v1/me (Failure: read-only field)
+
+Request:
+
+```json
+{
+  "real_name": "李四"
+}
+```
+
+Response:
+
+```json
+{
+  "error": "real_name is read-only",
+  "code": 40002
+}
 ```
