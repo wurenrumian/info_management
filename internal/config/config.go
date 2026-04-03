@@ -1,0 +1,69 @@
+package config
+
+import (
+	"os"
+	"strings"
+)
+
+const (
+	defaultJWTSecret  = "dev-secret-change-in-production"
+	defaultUploadDir  = "./data/uploads/documents"
+	defaultServerPort = "8080"
+)
+
+const (
+	DefaultDevClassID      uint   = 10
+	DefaultDevGrade        string = "2020"
+	DefaultDevMajor        string = "信息管理"
+	DefaultPublicClassID   uint   = 9999
+	DefaultPublicClassName        = "未绑定班级"
+)
+
+func DatabaseDSN() string {
+	return strings.TrimSpace(os.Getenv("DATABASE_DSN"))
+}
+
+func Port() string {
+	return getEnv("PORT", defaultServerPort)
+}
+
+func JWTSecret() string {
+	return getEnv("JWT_SECRET", defaultJWTSecret)
+}
+
+func WechatAppID() string {
+	return strings.TrimSpace(os.Getenv("WECHAT_APP_ID"))
+}
+
+func WechatAppSecret() string {
+	return strings.TrimSpace(os.Getenv("WECHAT_APP_SECRET"))
+}
+
+func DocumentUploadDir() string {
+	return getEnv("DOCUMENT_UPLOAD_DIR", defaultUploadDir)
+}
+
+func KnowledgeUploadDir() string {
+	return strings.TrimSpace(os.Getenv("KNOWLEDGE_UPLOAD_DIR"))
+}
+
+func PrimaryUploadDir() string {
+	if v := strings.TrimSpace(os.Getenv("DOCUMENT_UPLOAD_DIR")); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(os.Getenv("KNOWLEDGE_UPLOAD_DIR")); v != "" {
+		return v
+	}
+	return defaultUploadDir
+}
+
+func IsDevEnv() bool {
+	return strings.TrimSpace(os.Getenv("APP_ENV")) == "dev"
+}
+
+func getEnv(key, fallback string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
+	}
+	return fallback
+}

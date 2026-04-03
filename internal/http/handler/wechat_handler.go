@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"errors"
-	"os"
 	"strings"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 	"gorm.io/gorm"
 
 	"manage/internal/auth"
+	"manage/internal/config"
 	"manage/internal/http/response"
 	"manage/internal/model"
 	"manage/internal/repo"
@@ -21,8 +21,8 @@ import (
 )
 
 const (
-	defaultPublicClassID   = 9999
-	defaultPublicClassName = "未绑定班级"
+	defaultPublicClassID   = config.DefaultPublicClassID
+	defaultPublicClassName = config.DefaultPublicClassName
 )
 
 type WechatHandler struct {
@@ -104,15 +104,7 @@ func (h *WechatHandler) Login(c *gin.Context) {
 
 	response.OK(c, gin.H{
 		"token": token,
-		"user": gin.H{
-			"id":         user.ID,
-			"student_id": user.StudentID,
-			"name":       user.Name,
-			"role":       user.Role,
-			"class_id":   user.ClassID,
-			"grade":      user.Grade,
-			"major":      user.Major,
-		},
+		"user":  buildUserResponse(user),
 	})
 }
 
@@ -178,7 +170,7 @@ func (h *WechatHandler) Bind(c *gin.Context) {
 }
 
 func (h *WechatHandler) DevRegisterOrLogin(c *gin.Context) {
-	if strings.TrimSpace(os.Getenv("APP_ENV")) != "dev" {
+	if !config.IsDevEnv() {
 		response.Error(c, 403, "dev register-or-login is disabled")
 		return
 	}
@@ -197,15 +189,7 @@ func (h *WechatHandler) DevRegisterOrLogin(c *gin.Context) {
 
 	response.OK(c, gin.H{
 		"token": token,
-		"user": gin.H{
-			"id":         user.ID,
-			"student_id": user.StudentID,
-			"name":       user.Name,
-			"role":       user.Role,
-			"class_id":   user.ClassID,
-			"grade":      user.Grade,
-			"major":      user.Major,
-		},
+		"user":  buildUserResponse(user),
 	})
 }
 
@@ -281,22 +265,14 @@ func (h *WechatHandler) PublicRegister(c *gin.Context) {
 
 	response.OK(c, gin.H{
 		"token": token,
-		"user": gin.H{
-			"id":         user.ID,
-			"student_id": user.StudentID,
-			"name":       user.Name,
-			"role":       user.Role,
-			"class_id":   user.ClassID,
-			"grade":      user.Grade,
-			"major":      user.Major,
-		},
+		"user":  buildUserResponse(user),
 	})
 }
 
 // DevLoginAndSendSubscribeCheck handles a dev-only probe flow:
 // register/login -> upsert subscribe state -> send one subscribe message.
 func (h *WechatHandler) DevLoginAndSendSubscribeCheck(c *gin.Context) {
-	if strings.TrimSpace(os.Getenv("APP_ENV")) != "dev" {
+	if !config.IsDevEnv() {
 		response.Error(c, 403, "dev login-and-send-subscribe-check is disabled")
 		return
 	}
@@ -426,13 +402,25 @@ func (h *WechatHandler) DevLoginAndSendSubscribeCheck(c *gin.Context) {
 }
 
 func (h *WechatHandler) writeDevLoginError(c *gin.Context, err error, fallback string) {
-	switch err.Error() {
-	case "missing student_id":
+	switch {
+	case errors.Is(err, jwtauth.ErrMissingStudentID):
 		response.Error(c, 400, "missing student_id")
-	case "invalid role":
+	case errors.Is(err, jwtauth.ErrInvalidRole):
 		response.Error(c, 400, "invalid role")
 	default:
 		response.Error(c, 500, fallback)
+	}
+}
+
+func buildUserResponse(user *model.User) gin.H {
+	return gin.H{
+		"id":         user.ID,
+		"student_id": user.StudentID,
+		"name":       user.Name,
+		"role":       user.Role,
+		"class_id":   user.ClassID,
+		"grade":      user.Grade,
+		"major":      user.Major,
 	}
 }
 
@@ -485,17 +473,5 @@ func setDefaultTemplateValue(data map[string]interface{}, key, fallback string) 
 }
 
 func (h *WechatHandler) ensureDefaultPublicClass() error {
-	classRepo := repo.NewClassRepo(h.db)
-	_, err := classRepo.GetByID(defaultPublicClassID)
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return err
-	}
-
-	return classRepo.Create(&model.Class{
-		ID:        defaultPublicClassID,
-		ClassName: defaultPublicClassName,
-	})
+	return repo.EnsureClass(h.db, defaultPublicClassID, defaultPublicClassName, "", "")
 }

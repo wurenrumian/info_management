@@ -17,6 +17,13 @@ type NotificationHandler struct {
 	svc *notification.Service
 }
 
+type createNotificationTemplateReq struct {
+	Code             string `json:"code" binding:"required"`
+	WechatTemplateID string `json:"wechat_template_id" binding:"required"`
+	Name             string `json:"name" binding:"required"`
+	Fields           string `json:"fields"`
+}
+
 // NewNotificationHandler creates a NotificationHandler with the given service.
 func NewNotificationHandler(svc *notification.Service) *NotificationHandler {
 	return &NotificationHandler{svc: svc}
@@ -34,12 +41,7 @@ func (h *NotificationHandler) CreateTemplate(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		Code             string `json:"code" binding:"required"`
-		WechatTemplateID string `json:"wechat_template_id" binding:"required"`
-		Name             string `json:"name" binding:"required"`
-		Fields           string `json:"fields"`
-	}
+	var req createNotificationTemplateReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, 400, "invalid request")
 		return

@@ -16,37 +16,27 @@ func NewClassRepo(db *gorm.DB) *ClassRepo {
 }
 
 func (r *ClassRepo) ListByScope(scope authz.Scope, limit, offset int) ([]model.Class, error) {
-	q := r.db.Model(&model.Class{}).Limit(limit).Offset(offset)
-	switch {
-	case scope.AllowAll:
-	case scope.ClassID > 0 && scope.Grade != "":
-		q = q.Where("id = ? OR grade = ?", scope.ClassID, scope.Grade)
-	case scope.ClassID > 0:
-		q = q.Where("id = ?", scope.ClassID)
-	case scope.Grade != "":
-		q = q.Where("grade = ?", scope.Grade)
-	default:
-		q = q.Where("1 = 0")
-	}
-
-	var out []model.Class
-	err := q.Find(&out).Error
+	out, _, err := r.ListByScopeWithTotal(scope, limit, offset)
 	return out, err
 }
 
-func (r *ClassRepo) GetByIDInScope(scope authz.Scope, id uint) (*model.Class, error) {
-	q := r.db.Model(&model.Class{}).Where("id = ?", id)
-	switch {
-	case scope.AllowAll:
-	case scope.ClassID > 0 && scope.Grade != "":
-		q = q.Where("id = ? OR grade = ?", scope.ClassID, scope.Grade)
-	case scope.ClassID > 0:
-		q = q.Where("id = ?", scope.ClassID)
-	case scope.Grade != "":
-		q = q.Where("grade = ?", scope.Grade)
-	default:
-		q = q.Where("1 = 0")
+func (r *ClassRepo) ListByScopeWithTotal(scope authz.Scope, limit, offset int) ([]model.Class, int64, error) {
+	base := applyClassScope(r.db.Model(&model.Class{}), scope)
+	var total int64
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, err
 	}
+
+	var out []model.Class
+	err := applyClassScope(r.db.Model(&model.Class{}), scope).
+		Limit(limit).
+		Offset(offset).
+		Find(&out).Error
+	return out, total, err
+}
+
+func (r *ClassRepo) GetByIDInScope(scope authz.Scope, id uint) (*model.Class, error) {
+	q := applyClassScope(r.db.Model(&model.Class{}), scope).Where("id = ?", id)
 
 	var out model.Class
 	if err := q.First(&out).Error; err != nil {
@@ -68,12 +58,20 @@ func (r *ClassRepo) Create(item *model.Class) error {
 }
 
 func (r *ClassRepo) UpdateByID(id uint, updates map[string]any) error {
-	result := r.db.Model(&model.Class{}).Where("id = ?", id).Updates(updates)
-	if result.Error != nil {
-		return result.Error
+	return UpdateByID(r.db.Model(&model.Class{}), id, updates)
+}
+
+func applyClassScope(q *gorm.DB, scope authz.Scope) *gorm.DB {
+	switch {
+	case scope.AllowAll:
+	case scope.ClassID > 0 && scope.Grade != "":
+		q = q.Where("id = ? OR grade = ?", scope.ClassID, scope.Grade)
+	case scope.ClassID > 0:
+		q = q.Where("id = ?", scope.ClassID)
+	case scope.Grade != "":
+		q = q.Where("grade = ?", scope.Grade)
+	default:
+		q = q.Where("1 = 0")
 	}
-	if result.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
-	}
-	return nil
+	return q
 }

@@ -2,8 +2,8 @@ package app
 
 import (
 	"net/http"
-	"os"
 
+	"manage/internal/config"
 	"manage/internal/http/router"
 	"manage/internal/store"
 
@@ -11,7 +11,7 @@ import (
 )
 
 func Run() error {
-	dsn := os.Getenv("DATABASE_DSN")
+	dsn := config.DatabaseDSN()
 	var db *gorm.DB
 	var err error
 	if dsn != "" {
@@ -22,9 +22,6 @@ func Run() error {
 	}
 
 	r := router.New(db)
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
+	port := config.Port()
 	return http.ListenAndServe(":"+port, r)
 }

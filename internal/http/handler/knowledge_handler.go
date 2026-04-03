@@ -9,17 +9,17 @@ import (
 	"manage/internal/auth"
 	"manage/internal/http/response"
 	"manage/internal/service/authz"
-	knowledgeSvc "manage/internal/service/knowledge"
+	ksvc "manage/internal/service/knowledge"
 )
 
 // KnowledgeHandler handles student-facing knowledge search.
 type KnowledgeHandler struct {
-	svc *knowledgeSvc.Service
+	svc *ksvc.Service
 }
 
 // NewKnowledgeHandler creates a knowledge search handler.
 func NewKnowledgeHandler(db *gorm.DB) *KnowledgeHandler {
-	return &KnowledgeHandler{svc: knowledgeSvc.NewService(db)}
+	return &KnowledgeHandler{svc: ksvc.NewService(db)}
 }
 
 // Search returns knowledge items by keyword.

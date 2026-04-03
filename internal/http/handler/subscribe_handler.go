@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/xml"
+	"errors"
 	"io"
 	"log"
 	"time"
@@ -62,7 +63,7 @@ func (h *SubscribeHandler) ReportSubscribe(c *gin.Context) {
 		UpdatedAt:        now,
 	}
 
-	if err == gorm.ErrRecordNotFound {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		sub.SubscribedAt = now
 		if err := h.db.Create(&sub).Error; err != nil {
 			response.Error(c, 500, "failed to record subscription")

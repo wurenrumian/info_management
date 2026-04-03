@@ -171,14 +171,7 @@ func (r *KnowledgeRepo) Create(item *model.KnowledgeItem) error {
 
 // UpdateByID updates one knowledge item by id.
 func (r *KnowledgeRepo) UpdateByID(id uint, updates map[string]any) error {
-	tx := r.db.Model(&model.KnowledgeItem{}).Where("id = ?", id).Updates(updates)
-	if tx.Error != nil {
-		return tx.Error
-	}
-	if tx.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
-	}
-	return nil
+	return UpdateByID(r.db.Model(&model.KnowledgeItem{}), id, updates)
 }
 
 // GetByID returns one knowledge item by id.

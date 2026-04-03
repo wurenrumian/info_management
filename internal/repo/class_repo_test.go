@@ -13,7 +13,7 @@ import (
 )
 
 func TestClassRepoListByScope(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&model.Class{}))
 
@@ -46,4 +46,38 @@ func TestClassRepoListByScope(t *testing.T) {
 	none, err := r.ListByScope(authz.Scope{}, 20, 0)
 	require.NoError(t, err)
 	require.Len(t, none, 0)
+}
+
+func TestEnsureClassCreatesWhenMissing(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.Class{}))
+
+	require.NoError(t, repo.EnsureClass(db, 9999, "未绑定班级", "2020", "信息管理"))
+
+	var class model.Class
+	require.NoError(t, db.First(&class, 9999).Error)
+	require.Equal(t, "未绑定班级", class.ClassName)
+	require.Equal(t, "2020", class.Grade)
+	require.Equal(t, "信息管理", class.Major)
+}
+
+func TestEnsureClassIsNoopWhenExists(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.Class{}))
+	require.NoError(t, db.Create(&model.Class{
+		ID:        10,
+		ClassName: "Old Name",
+		Grade:     "2021",
+		Major:     "CS",
+	}).Error)
+
+	require.NoError(t, repo.EnsureClass(db, 10, "New Name", "2022", "SE"))
+
+	var class model.Class
+	require.NoError(t, db.First(&class, 10).Error)
+	require.Equal(t, "Old Name", class.ClassName)
+	require.Equal(t, "2021", class.Grade)
+	require.Equal(t, "CS", class.Major)
 }

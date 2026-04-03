@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -14,36 +13,32 @@ import (
 	"gorm.io/gorm"
 
 	"manage/internal/auth"
+	"manage/internal/config"
 	"manage/internal/http/response"
 	"manage/internal/model"
 	"manage/internal/repo"
+	"manage/internal/service/audit"
 	"manage/internal/service/authz"
-	knowledgeSvc "manage/internal/service/knowledge"
+	ksvc "manage/internal/service/knowledge"
 	"manage/internal/service/upload"
 )
 
 // AdminKnowledgeHandler handles knowledge management APIs.
 type AdminKnowledgeHandler struct {
-	svc       *knowledgeSvc.Service
-	logRepo   *repo.AdminLogRepo
-	uploadSvc *upload.Service
-	uploadDir string
+	svc         *ksvc.Service
+	auditLogger *audit.Logger
+	uploadSvc   *upload.Service
+	uploadDir   string
 }
 
 // NewAdminKnowledgeHandler creates an admin knowledge handler.
 func NewAdminKnowledgeHandler(db *gorm.DB) *AdminKnowledgeHandler {
-	uploadDir := os.Getenv("DOCUMENT_UPLOAD_DIR")
-	if strings.TrimSpace(uploadDir) == "" {
-		uploadDir = os.Getenv("KNOWLEDGE_UPLOAD_DIR")
-		if uploadDir == "" {
-			uploadDir = "./data/uploads/documents"
-		}
-	}
+	uploadDir := config.PrimaryUploadDir()
 	return &AdminKnowledgeHandler{
-		svc:       knowledgeSvc.NewService(db),
-		logRepo:   repo.NewAdminLogRepo(db),
-		uploadSvc: upload.NewService(uploadDir),
-		uploadDir: uploadDir,
+		svc:         ksvc.NewService(db),
+		auditLogger: audit.NewLogger(repo.NewAdminLogRepo(db)),
+		uploadSvc:   upload.NewService(uploadDir),
+		uploadDir:   uploadDir,
 	}
 }
 
@@ -156,13 +151,7 @@ func (h *AdminKnowledgeHandler) CreateKnowledge(c *gin.Context) {
 		return
 	}
 
-	_ = h.logRepo.Create(&model.AdminLog{
-		AdminID:    actor.UserID,
-		Action:     "knowledge.create",
-		TargetType: "knowledge",
-		TargetID:   item.ID,
-		IPAddress:  c.ClientIP(),
-	})
+	h.auditLogger.Log(c, actor, "knowledge.create", "knowledge", item.ID)
 	response.OK(c, item)
 }
 
@@ -228,7 +217,7 @@ func (h *AdminKnowledgeHandler) PatchKnowledge(c *gin.Context) {
 		return
 	}
 
-	_ = h.logRepo.Create(&model.AdminLog{AdminID: actor.UserID, Action: "knowledge.patch", TargetType: "knowledge", TargetID: uint(id64), IPAddress: c.ClientIP()})
+	h.auditLogger.Log(c, actor, "knowledge.patch", "knowledge", uint(id64))
 	response.OK(c, gin.H{"updated": true})
 }
 
@@ -283,13 +272,7 @@ func (h *AdminKnowledgeHandler) ImportKnowledge(c *gin.Context) {
 		return
 	}
 
-	_ = h.logRepo.Create(&model.AdminLog{
-		AdminID:    actor.UserID,
-		Action:     "knowledge.import",
-		TargetType: "knowledge",
-		TargetID:   item.ID,
-		IPAddress:  c.ClientIP(),
-	})
+	h.auditLogger.Log(c, actor, "knowledge.import", "knowledge", item.ID)
 	response.OK(c, item)
 }
 
@@ -320,13 +303,7 @@ func (h *AdminKnowledgeHandler) DeleteKnowledge(c *gin.Context) {
 		return
 	}
 
-	_ = h.logRepo.Create(&model.AdminLog{
-		AdminID:    actor.UserID,
-		Action:     "knowledge.delete",
-		TargetType: "knowledge",
-		TargetID:   uint(id64),
-		IPAddress:  c.ClientIP(),
-	})
+	h.auditLogger.Log(c, actor, "knowledge.delete", "knowledge", uint(id64))
 	response.OK(c, gin.H{"deleted": true})
 }
 
@@ -367,7 +344,7 @@ func (h *AdminKnowledgeHandler) saveUploadedFiles(c *gin.Context) ([]map[string]
 			"title": file.Filename,
 			"url":   "/uploads/documents/" + result.FilePath,
 		})
-		if text := knowledgeSvc.ExtractTextFromFile(filepath.Join(h.uploadDir, result.FilePath)); text != "" {
+		if text := ksvc.ExtractTextFromFile(filepath.Join(h.uploadDir, result.FilePath)); text != "" {
 			textParts = append(textParts, text)
 		}
 	}

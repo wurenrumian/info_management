@@ -9,16 +9,20 @@ import (
 	"manage/internal/http/response"
 	"manage/internal/model"
 	"manage/internal/repo"
+	"manage/internal/service/audit"
 	"manage/internal/service/authz"
 )
 
 type AdminClassHandler struct {
-	classRepo *repo.ClassRepo
-	logRepo   *repo.AdminLogRepo
+	classRepo   *repo.ClassRepo
+	auditLogger *audit.Logger
 }
 
 func NewAdminClassHandler(db *gorm.DB) *AdminClassHandler {
-	return &AdminClassHandler{classRepo: repo.NewClassRepo(db), logRepo: repo.NewAdminLogRepo(db)}
+	return &AdminClassHandler{
+		classRepo:   repo.NewClassRepo(db),
+		auditLogger: audit.NewLogger(repo.NewAdminLogRepo(db)),
+	}
 }
 
 func (h *AdminClassHandler) ListClasses(c *gin.Context) {
@@ -31,12 +35,12 @@ func (h *AdminClassHandler) ListClasses(c *gin.Context) {
 		response.Error(c, 403, "forbidden")
 		return
 	}
-	items, err := h.classRepo.ListByScope(authz.BuildScope(actor), 20, 0)
+	items, total, err := h.classRepo.ListByScopeWithTotal(authz.BuildScope(actor), 20, 0)
 	if err != nil {
 		response.Error(c, 500, "list classes failed")
 		return
 	}
-	response.OK(c, items)
+	response.List(c, items, total)
 }
 
 func (h *AdminClassHandler) GetClass(c *gin.Context) {
@@ -92,7 +96,7 @@ func (h *AdminClassHandler) CreateClass(c *gin.Context) {
 		response.Error(c, 500, "create class failed")
 		return
 	}
-	_ = h.logRepo.Create(&model.AdminLog{AdminID: actor.UserID, Action: "classes.create", TargetType: "class", TargetID: item.ID, IPAddress: c.ClientIP()})
+	h.auditLogger.Log(c, actor, "classes.create", "class", item.ID)
 	response.OK(c, item)
 }
 
@@ -140,6 +144,6 @@ func (h *AdminClassHandler) PatchClass(c *gin.Context) {
 		response.Error(c, 500, "update class failed")
 		return
 	}
-	_ = h.logRepo.Create(&model.AdminLog{AdminID: actor.UserID, Action: "classes.patch", TargetType: "class", TargetID: uint(id), IPAddress: c.ClientIP()})
+	h.auditLogger.Log(c, actor, "classes.patch", "class", uint(id))
 	response.OK(c, gin.H{"updated": true})
 }
