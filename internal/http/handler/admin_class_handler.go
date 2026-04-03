@@ -11,17 +11,20 @@ import (
 	"manage/internal/repo"
 	"manage/internal/service/audit"
 	"manage/internal/service/authz"
+	gradesvc "manage/internal/service/grade"
 )
 
 type AdminClassHandler struct {
 	classRepo   *repo.ClassRepo
 	auditLogger *audit.Logger
+	gradeSvc    *gradesvc.Service
 }
 
 func NewAdminClassHandler(db *gorm.DB) *AdminClassHandler {
 	return &AdminClassHandler{
 		classRepo:   repo.NewClassRepo(db),
 		auditLogger: audit.NewLogger(repo.NewAdminLogRepo(db)),
+		gradeSvc:    gradesvc.NewService(db),
 	}
 }
 
@@ -121,6 +124,11 @@ func (h *AdminClassHandler) PatchClass(c *gin.Context) {
 		response.Error(c, 400, "invalid id")
 		return
 	}
+	before, err := h.classRepo.GetByIDInScope(authz.BuildScope(actor), uint(id))
+	if err != nil {
+		response.Error(c, 404, "class not found")
+		return
+	}
 	var req patchClassReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, 400, "invalid body")
@@ -143,6 +151,12 @@ func (h *AdminClassHandler) PatchClass(c *gin.Context) {
 	if err := h.classRepo.UpdateByID(uint(id), updates); err != nil {
 		response.Error(c, 500, "update class failed")
 		return
+	}
+	if req.Grade != nil && *req.Grade != before.Grade {
+		if _, err := h.gradeSvc.SyncUsersGradeByClassID(uint(id)); err != nil {
+			response.Error(c, 500, "sync users grade failed")
+			return
+		}
 	}
 	h.auditLogger.Log(c, actor, "classes.patch", "class", uint(id))
 	response.OK(c, gin.H{"updated": true})

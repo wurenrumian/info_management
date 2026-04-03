@@ -9,6 +9,7 @@ import (
 	"manage/internal/config"
 	"manage/internal/model"
 	"manage/internal/repo"
+	gradesvc "manage/internal/service/grade"
 )
 
 const (
@@ -26,6 +27,7 @@ var (
 type DevLoginService struct {
 	userRepo  *repo.UserRepo
 	classRepo *repo.ClassRepo
+	gradeSvc  *gradesvc.Service
 	db        *gorm.DB
 	jwtSecret string
 }
@@ -35,6 +37,7 @@ func NewDevLoginService(db *gorm.DB, jwtSecret string) *DevLoginService {
 	return &DevLoginService{
 		userRepo:  repo.NewUserRepo(db),
 		classRepo: repo.NewClassRepo(db),
+		gradeSvc:  gradesvc.NewService(db),
 		db:        db,
 		jwtSecret: jwtSecret,
 	}
@@ -74,7 +77,18 @@ func (s *DevLoginService) RegisterOrLogin(studentID string, role *int) (string, 
 		}
 	}
 
-	token, err := GenerateToken(user.ID, user.Role, user.ClassID, user.Grade, s.jwtSecret)
+	effectiveGrade, err := s.gradeSvc.ResolveEffectiveGrade(user)
+	if err != nil {
+		return "", nil, err
+	}
+	if user.ClassID > 0 && user.Grade != effectiveGrade {
+		if err := s.userRepo.UpdateByID(user.ID, map[string]any{"grade": effectiveGrade}); err != nil {
+			return "", nil, err
+		}
+		user.Grade = effectiveGrade
+	}
+
+	token, err := GenerateToken(user.ID, user.Role, user.ClassID, effectiveGrade, s.jwtSecret)
 	if err != nil {
 		return "", nil, err
 	}

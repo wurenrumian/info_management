@@ -148,6 +148,12 @@ Token 由 `POST /api/v1/wechat/login` 返回，包含 `sub`（user ID）、`role
 4. `authz.BuildScope(actor)`
 5. repo 查询/更新应用 scope
 
+`grade` 治理约定（强制）：
+- `classes.grade` 是事实源（source of truth）
+- `users.grade` 是系统维护快照（用于兼容与查询性能）
+- 禁止业务接口直接修改 `users.grade`，应通过班级或同步逻辑变更
+- `enrollment_year` 是个人资料字段，不参与权限范围判断
+
 测试中生成 token 使用 `testutil.GenerateTestToken(userID, role, classID, grade)`。
 
 ---

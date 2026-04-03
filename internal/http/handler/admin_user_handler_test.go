@@ -85,3 +85,41 @@ func TestPatchUserWritesAdminLog(t *testing.T) {
 	require.Equal(t, uint(999), logs[0].AdminID)
 	require.Equal(t, uint(100), logs[0].TargetID)
 }
+
+func TestPatchUserRejectsGradeField(t *testing.T) {
+	db := setupTestRouter(t)
+	r := router.New(db)
+
+	body := []byte(`{"grade":"2099"}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/users/100", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	token := testutil.GenerateTestToken(999, model.RoleSuperAdmin, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.Contains(t, w.Body.String(), "grade is system-managed")
+}
+
+func TestPatchUserClassIDSyncsGrade(t *testing.T) {
+	db := setupTestRouter(t)
+	r := router.New(db)
+
+	require.NoError(t, db.Create(&model.Class{ID: 3, ClassName: "C3", Grade: "2025", Major: "AI"}).Error)
+
+	body := []byte(`{"class_id":3}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/users/100", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	token := testutil.GenerateTestToken(999, model.RoleSuperAdmin, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var user model.User
+	require.NoError(t, db.First(&user, 100).Error)
+	require.Equal(t, uint(3), user.ClassID)
+	require.Equal(t, "2025", user.Grade)
+}

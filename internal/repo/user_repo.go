@@ -49,6 +49,11 @@ func (r *UserRepo) UpdateByID(id uint, updates map[string]any) error {
 	return UpdateByID(r.db.Model(&model.User{}), id, updates)
 }
 
+func (r *UserRepo) BulkUpdateGradeByClassID(classID uint, grade string) (int64, error) {
+	tx := r.db.Model(&model.User{}).Where("class_id = ?", classID).Update("grade", grade)
+	return tx.RowsAffected, tx.Error
+}
+
 func (r *UserRepo) Create(user *model.User) error {
 	return r.db.Create(user).Error
 }
