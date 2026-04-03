@@ -20,6 +20,11 @@ import (
 	"manage/internal/service/wechat"
 )
 
+const (
+	defaultPublicClassID   = 9999
+	defaultPublicClassName = "未绑定班级"
+)
+
 type WechatHandler struct {
 	wechatSvc *wechat.Service
 	userRepo  *repo.UserRepo
@@ -226,11 +231,16 @@ func (h *WechatHandler) PublicRegister(c *gin.Context) {
 			response.Error(c, 500, "public register failed")
 			return
 		}
+		if err := h.ensureDefaultPublicClass(); err != nil {
+			response.Error(c, 500, "public register failed")
+			return
+		}
 
 		user = &model.User{
 			StudentID: studentID,
 			Name:      name,
 			Role:      model.RoleStudent,
+			ClassID:   defaultPublicClassID,
 		}
 		if err := h.userRepo.Create(user); err != nil {
 			response.Error(c, 500, "public register failed")
@@ -390,13 +400,7 @@ func (h *WechatHandler) DevLoginAndSendSubscribeCheck(c *gin.Context) {
 		if page == "" {
 			page = "/pages/index/index"
 		}
-		templateData := req.TemplateData
-		if templateData == nil {
-			templateData = map[string]interface{}{
-				"thing1": map[string]string{"value": "Dev登录订阅验证"},
-				"time2":  map[string]string{"value": now.Format("2006-01-02 15:04:05")},
-			}
-		}
+		templateData := buildDevSubscribeTemplateData(templateCode, req.TemplateData, user, c.ClientIP(), now)
 		if err := h.notifSvc.Send(context.Background(), notification.SendRequest{
 			UserID:       user.ID,
 			TemplateCode: templateCode,
@@ -430,4 +434,68 @@ func (h *WechatHandler) writeDevLoginError(c *gin.Context, err error, fallback s
 	default:
 		response.Error(c, 500, fallback)
 	}
+}
+
+func buildDevSubscribeTemplateData(templateCode string, input map[string]interface{}, user *model.User, clientIP string, now time.Time) map[string]interface{} {
+	out := map[string]interface{}{}
+	for k, v := range input {
+		out[k] = v
+	}
+
+	setDefaultTemplateValue(out, "thing1", "Dev登录订阅验证")
+	setDefaultTemplateValue(out, "time2", now.Format("2006-01-02 15:04:05"))
+
+	if templateCode == "loging_notification" {
+		ip := strings.TrimSpace(clientIP)
+		if ip == "" {
+			ip = "127.0.0.1"
+		}
+		setDefaultTemplateValue(out, "character_string3", ip)
+
+		userLabel := strings.TrimSpace(user.Name)
+		if userLabel == "" {
+			userLabel = strings.TrimSpace(user.StudentID)
+		} else if strings.TrimSpace(user.StudentID) != "" {
+			userLabel = userLabel + " (" + strings.TrimSpace(user.StudentID) + ")"
+		}
+		setDefaultTemplateValue(out, "thing4", userLabel)
+	}
+
+	return out
+}
+
+func setDefaultTemplateValue(data map[string]interface{}, key, fallback string) {
+	if field, ok := data[key].(map[string]interface{}); ok {
+		if value, ok := field["value"].(string); ok && strings.TrimSpace(value) != "" {
+			return
+		}
+		field["value"] = fallback
+		data[key] = field
+		return
+	}
+	if field, ok := data[key].(map[string]string); ok {
+		if value, ok := field["value"]; ok && strings.TrimSpace(value) != "" {
+			return
+		}
+		field["value"] = fallback
+		data[key] = field
+		return
+	}
+	data[key] = map[string]interface{}{"value": fallback}
+}
+
+func (h *WechatHandler) ensureDefaultPublicClass() error {
+	classRepo := repo.NewClassRepo(h.db)
+	_, err := classRepo.GetByID(defaultPublicClassID)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+
+	return classRepo.Create(&model.Class{
+		ID:        defaultPublicClassID,
+		ClassName: defaultPublicClassName,
+	})
 }
