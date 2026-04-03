@@ -7,12 +7,14 @@ import (
 	"net/http"
 )
 
+// Service provides WeChat code2session lookups.
 type Service struct {
 	appID     string
 	appSecret string
 	baseURL   string
 }
 
+// NewService creates a WeChat API service with the official code2session endpoint.
 func NewService(appID, appSecret string) *Service {
 	return &Service{
 		appID:     appID,
@@ -21,6 +23,7 @@ func NewService(appID, appSecret string) *Service {
 	}
 }
 
+// NewServiceWithBaseURL creates a WeChat service with a custom base URL (for tests).
 func NewServiceWithBaseURL(appID, appSecret, baseURL string) *Service {
 	return &Service{
 		appID:     appID,
@@ -36,6 +39,7 @@ type code2SessionResp struct {
 	ErrMsg     string `json:"errmsg"`
 }
 
+// CodeToOpenID exchanges a login code for OpenID.
 func (s *Service) CodeToOpenID(code string) (string, error) {
 	url := fmt.Sprintf("%s?appid=%s&secret=%s&js_code=%s&grant_type=authorization_code",
 		s.baseURL, s.appID, s.appSecret, code)

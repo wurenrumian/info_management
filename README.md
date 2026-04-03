@@ -1,6 +1,6 @@
 # Manage Backend
 
-第二阶段（Knowledge Base）已完成，当前除 Foundation RBAC 外，已支持知识库检索与管理接口、微信 OpenID 绑定与登录。
+第二阶段已完成，当前除 Foundation RBAC 外，已支持文件上传下载、知识库检索与管理接口、微信 OpenID 绑定与登录、通知能力。
 
 ## Phase 1 Delivered
 
@@ -38,7 +38,7 @@ go run ./cmd/server
 
 ## Authentication (JWT)
 
-All `/api/v1/*` routes (except `/wechat/login` and `/wechat/bind`) require a JWT token:
+All `/api/v1/*` routes (except public/dev auth endpoints) require a JWT token:
 
 ```
 Authorization: Bearer <token>
@@ -46,7 +46,8 @@ Authorization: Bearer <token>
 
 Token claims: `sub` (user ID), `role`, `class_id`, `grade`.
 
-WeChat endpoints:
+Auth-related endpoints:
+- `POST /api/v1/auth/public-register` — no auth required, public registration + JWT
 - `POST /api/v1/wechat/login` — no auth required, returns JWT token
 - `POST /api/v1/wechat/bind` — optional auth (with token binds to current user, without token requires `student_id` + `password`)
 - `POST /api/v1/dev/register-or-login` — dev only, returns JWT and creates a test user when missing

@@ -16,37 +16,27 @@ func NewUserRepo(db *gorm.DB) *UserRepo {
 }
 
 func (r *UserRepo) ListByScope(scope authz.Scope, limit, offset int) ([]model.User, error) {
-	q := r.db.Model(&model.User{}).Preload("Class").Limit(limit).Offset(offset)
-	switch {
-	case scope.AllowAll:
-	case scope.SelfUserID > 0:
-		q = q.Where("id = ?", scope.SelfUserID)
-	case scope.ClassID > 0 && scope.Grade != "":
-		q = q.Where("class_id = ? OR grade = ?", scope.ClassID, scope.Grade)
-	case scope.ClassID > 0:
-		q = q.Where("class_id = ?", scope.ClassID)
-	default:
-		q = q.Where("1 = 0")
-	}
-
-	var out []model.User
-	err := q.Find(&out).Error
+	out, _, err := r.ListByScopeWithTotal(scope, limit, offset)
 	return out, err
 }
 
-func (r *UserRepo) GetByIDInScope(scope authz.Scope, id uint) (*model.User, error) {
-	q := r.db.Model(&model.User{}).Preload("Class").Where("id = ?", id)
-	switch {
-	case scope.AllowAll:
-	case scope.SelfUserID > 0:
-		q = q.Where("id = ?", scope.SelfUserID)
-	case scope.ClassID > 0 && scope.Grade != "":
-		q = q.Where("class_id = ? OR grade = ?", scope.ClassID, scope.Grade)
-	case scope.ClassID > 0:
-		q = q.Where("class_id = ?", scope.ClassID)
-	default:
-		q = q.Where("1 = 0")
+func (r *UserRepo) ListByScopeWithTotal(scope authz.Scope, limit, offset int) ([]model.User, int64, error) {
+	base := applyUserScope(r.db.Model(&model.User{}), scope)
+	var total int64
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, err
 	}
+
+	var out []model.User
+	err := applyUserScope(r.db.Model(&model.User{}).Preload("Class"), scope).
+		Limit(limit).
+		Offset(offset).
+		Find(&out).Error
+	return out, total, err
+}
+
+func (r *UserRepo) GetByIDInScope(scope authz.Scope, id uint) (*model.User, error) {
+	q := applyUserScope(r.db.Model(&model.User{}).Preload("Class"), scope).Where("id = ?", id)
 
 	var out model.User
 	if err := q.First(&out).Error; err != nil {
@@ -56,14 +46,7 @@ func (r *UserRepo) GetByIDInScope(scope authz.Scope, id uint) (*model.User, erro
 }
 
 func (r *UserRepo) UpdateByID(id uint, updates map[string]any) error {
-	result := r.db.Model(&model.User{}).Where("id = ?", id).Updates(updates)
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
-	}
-	return nil
+	return UpdateByID(r.db.Model(&model.User{}), id, updates)
 }
 
 func (r *UserRepo) Create(user *model.User) error {
@@ -90,4 +73,19 @@ func (r *UserRepo) GetByStudentID(studentID string) (*model.User, error) {
 
 func (r *UserRepo) UpdatePasswordHash(userID uint, hash string) error {
 	return r.db.Model(&model.User{}).Where("id = ?", userID).Update("password_hash", hash).Error
+}
+
+func applyUserScope(q *gorm.DB, scope authz.Scope) *gorm.DB {
+	switch {
+	case scope.AllowAll:
+	case scope.SelfUserID > 0:
+		q = q.Where("id = ?", scope.SelfUserID)
+	case scope.ClassID > 0 && scope.Grade != "":
+		q = q.Where("class_id = ? OR grade = ?", scope.ClassID, scope.Grade)
+	case scope.ClassID > 0:
+		q = q.Where("class_id = ?", scope.ClassID)
+	default:
+		q = q.Where("1 = 0")
+	}
+	return q
 }

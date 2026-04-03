@@ -1,12 +1,10 @@
 package router
 
 import (
-	"os"
-	"strings"
-
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"manage/internal/config"
 	"manage/internal/http/handler"
 	"manage/internal/http/middleware"
 	"manage/internal/service/notification"
@@ -18,24 +16,18 @@ func New(db *gorm.DB) *gin.Engine {
 	r.GET("/healthz", handler.Health)
 
 	// Unified static file serving
-	uploadDir := strings.TrimSpace(os.Getenv("DOCUMENT_UPLOAD_DIR"))
-	if uploadDir == "" {
-		uploadDir = "./data/uploads/documents"
-	}
+	uploadDir := config.DocumentUploadDir()
 	r.Static("/uploads/documents", uploadDir)
 
 	// Backward compat: knowledge uploads
-	knowledgeDir := strings.TrimSpace(os.Getenv("KNOWLEDGE_UPLOAD_DIR"))
+	knowledgeDir := config.KnowledgeUploadDir()
 	if knowledgeDir != "" {
 		r.Static("/uploads/knowledge", knowledgeDir)
 	}
 
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		jwtSecret = "dev-secret-change-in-production"
-	}
-	appID := os.Getenv("WECHAT_APP_ID")
-	appSecret := os.Getenv("WECHAT_APP_SECRET")
+	jwtSecret := config.JWTSecret()
+	appID := config.WechatAppID()
+	appSecret := config.WechatAppSecret()
 
 	api := r.Group("/api/v1")
 
@@ -104,8 +96,8 @@ func New(db *gorm.DB) *gin.Engine {
 }
 
 func initNotificationSvc(db *gorm.DB) *notification.Service {
-	appID := os.Getenv("WECHAT_APP_ID")
-	appSecret := os.Getenv("WECHAT_APP_SECRET")
+	appID := config.WechatAppID()
+	appSecret := config.WechatAppSecret()
 	tokenCache := notification.NewTokenCache(appID, appSecret, nil)
 	wechatClient := notification.NewWechatClient(nil, tokenCache)
 	repo := notification.NewRepo(db)

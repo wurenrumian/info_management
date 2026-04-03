@@ -6,10 +6,10 @@ import "time"
 type NotificationLog struct {
 	ID           uint       `gorm:"primaryKey" json:"id"`
 	UserID       uint       `gorm:"index;not null" json:"user_id"`
-	TemplateCode string     `gorm:"size:64;index;not null" json:"template_code"`
+	TemplateCode string     `gorm:"type:varchar(64);index;not null" json:"template_code"`
 	TemplateData string     `gorm:"type:jsonb" json:"template_data"`
-	Status       string     `gorm:"size:16;not null;default:pending" json:"status"`
-	ErrorMsg     string     `gorm:"size:500" json:"error_msg"`
+	Status       string     `gorm:"type:varchar(16);not null;default:pending" json:"status"`
+	ErrorMsg     string     `gorm:"type:varchar(500)" json:"error_msg"`
 	SentAt       *time.Time `json:"sent_at"`
 	CreatedAt    time.Time  `json:"created_at"`
 }

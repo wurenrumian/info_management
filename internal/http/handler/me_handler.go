@@ -15,6 +15,11 @@ type MeHandler struct {
 	svc *profile.Service
 }
 
+type updateProfileReq struct {
+	AvatarURL *string `json:"avatar_url"`
+	Bio       *string `json:"bio"`
+}
+
 func NewMeHandler(db *gorm.DB) *MeHandler {
 	return &MeHandler{svc: profile.NewService(db)}
 }
@@ -77,10 +82,7 @@ func (h *MeHandler) PatchMe(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		AvatarURL *string `json:"avatar_url"`
-		Bio       *string `json:"bio"`
-	}
+	var req updateProfileReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, 400, "invalid body")
 		return
@@ -90,7 +92,7 @@ func (h *MeHandler) PatchMe(c *gin.Context) {
 		switch {
 		case errors.Is(err, gorm.ErrRecordNotFound):
 			response.Error(c, 404, "user not found")
-		case err.Error() == "empty patch":
+		case errors.Is(err, profile.ErrEmptyPatch):
 			response.Error(c, 400, "empty patch")
 		default:
 			response.Error(c, 500, "update me failed")

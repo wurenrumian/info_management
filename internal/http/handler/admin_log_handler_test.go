@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -86,4 +87,10 @@ func TestAdminLogsReturnsLogsForSuperAdmin(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Body.String(), "knowledge.create")
 	require.Contains(t, w.Body.String(), "user.patch")
+
+	var resp struct {
+		Total int64 `json:"total"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Equal(t, int64(2), resp.Total)
 }

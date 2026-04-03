@@ -33,6 +33,8 @@ type AccountState struct {
 	WechatBound bool `json:"wechat_bound"`
 }
 
+var ErrEmptyPatch = errors.New("empty patch")
+
 // Service encapsulates profile-related business logic.
 type Service struct {
 	userRepo      *repo.UserRepo
@@ -83,7 +85,7 @@ func (s *Service) PatchMe(userID uint, avatarURL, bio *string) error {
 		return errors.New("invalid user id")
 	}
 	if avatarURL == nil && bio == nil {
-		return errors.New("empty patch")
+		return ErrEmptyPatch
 	}
 
 	user, err := s.userRepo.GetByIDInScope(authz.Scope{SelfUserID: userID}, userID)

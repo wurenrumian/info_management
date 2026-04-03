@@ -9,18 +9,21 @@ import (
 	"gorm.io/gorm"
 	"manage/internal/auth"
 	"manage/internal/http/response"
-	"manage/internal/model"
 	"manage/internal/repo"
+	"manage/internal/service/audit"
 	"manage/internal/service/authz"
 )
 
 type AdminUserHandler struct {
-	userRepo *repo.UserRepo
-	logRepo  *repo.AdminLogRepo
+	userRepo    *repo.UserRepo
+	auditLogger *audit.Logger
 }
 
 func NewAdminUserHandler(db *gorm.DB) *AdminUserHandler {
-	return &AdminUserHandler{userRepo: repo.NewUserRepo(db), logRepo: repo.NewAdminLogRepo(db)}
+	return &AdminUserHandler{
+		userRepo:    repo.NewUserRepo(db),
+		auditLogger: audit.NewLogger(repo.NewAdminLogRepo(db)),
+	}
 }
 
 func (h *AdminUserHandler) ListUsers(c *gin.Context) {
@@ -33,12 +36,12 @@ func (h *AdminUserHandler) ListUsers(c *gin.Context) {
 		response.Error(c, 403, "forbidden")
 		return
 	}
-	users, err := h.userRepo.ListByScope(authz.BuildScope(actor), 20, 0)
+	users, total, err := h.userRepo.ListByScopeWithTotal(authz.BuildScope(actor), 20, 0)
 	if err != nil {
 		response.Error(c, 500, "list users failed")
 		return
 	}
-	response.OK(c, users)
+	response.List(c, users, total)
 }
 
 func (h *AdminUserHandler) GetUser(c *gin.Context) {
@@ -124,6 +127,6 @@ func (h *AdminUserHandler) PatchUser(c *gin.Context) {
 		response.Error(c, 500, "update user failed")
 		return
 	}
-	_ = h.logRepo.Create(&model.AdminLog{AdminID: actor.UserID, Action: "users.patch", TargetType: "user", TargetID: uint(id), IPAddress: c.ClientIP()})
+	h.auditLogger.Log(c, actor, "users.patch", "user", uint(id))
 	response.OK(c, gin.H{"updated": true})
 }

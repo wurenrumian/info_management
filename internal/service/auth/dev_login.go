@@ -6,20 +6,27 @@ import (
 
 	"gorm.io/gorm"
 
+	"manage/internal/config"
 	"manage/internal/model"
 	"manage/internal/repo"
 )
 
 const (
-	defaultDevClassID = 10
-	defaultDevGrade   = "2020"
-	defaultDevMajor   = "信息管理"
+	defaultDevClassID = config.DefaultDevClassID
+	defaultDevGrade   = config.DefaultDevGrade
+	defaultDevMajor   = config.DefaultDevMajor
+)
+
+var (
+	ErrMissingStudentID = errors.New("missing student_id")
+	ErrInvalidRole      = errors.New("invalid role")
 )
 
 // DevLoginService handles development-only test user issuance.
 type DevLoginService struct {
 	userRepo  *repo.UserRepo
 	classRepo *repo.ClassRepo
+	db        *gorm.DB
 	jwtSecret string
 }
 
@@ -28,6 +35,7 @@ func NewDevLoginService(db *gorm.DB, jwtSecret string) *DevLoginService {
 	return &DevLoginService{
 		userRepo:  repo.NewUserRepo(db),
 		classRepo: repo.NewClassRepo(db),
+		db:        db,
 		jwtSecret: jwtSecret,
 	}
 }
@@ -36,7 +44,7 @@ func NewDevLoginService(db *gorm.DB, jwtSecret string) *DevLoginService {
 func (s *DevLoginService) RegisterOrLogin(studentID string, role *int) (string, *model.User, error) {
 	studentID = strings.TrimSpace(studentID)
 	if studentID == "" {
-		return "", nil, errors.New("missing student_id")
+		return "", nil, ErrMissingStudentID
 	}
 
 	user, err := s.userRepo.GetByStudentID(studentID)
@@ -82,23 +90,10 @@ func normalizeDevRole(role *int) (int, error) {
 	case model.RoleStudent, model.RoleCadre, model.RoleTeacher, model.RoleSuperAdmin:
 		return *role, nil
 	default:
-		return 0, errors.New("invalid role")
+		return 0, ErrInvalidRole
 	}
 }
 
 func (s *DevLoginService) ensureDefaultDevClass() error {
-	_, err := s.classRepo.GetByID(defaultDevClassID)
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return err
-	}
-
-	return s.classRepo.Create(&model.Class{
-		ID:        defaultDevClassID,
-		ClassName: "Dev Class 10",
-		Grade:     defaultDevGrade,
-		Major:     defaultDevMajor,
-	})
+	return repo.EnsureClass(s.db, defaultDevClassID, "Dev Class 10", defaultDevGrade, defaultDevMajor)
 }

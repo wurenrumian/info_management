@@ -7,6 +7,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// Claims represents custom JWT claims used by this project.
 type Claims struct {
 	UserID  uint   `json:"sub"`
 	Role    int    `json:"role"`
@@ -15,6 +16,7 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
+// GenerateToken creates a signed JWT for the given user identity.
 func GenerateToken(userID uint, role int, classID uint, grade string, secret string) (string, error) {
 	claims := Claims{
 		UserID:  userID,
@@ -30,6 +32,7 @@ func GenerateToken(userID uint, role int, classID uint, grade string, secret str
 	return token.SignedString([]byte(secret))
 }
 
+// ParseToken validates a signed JWT and returns parsed claims.
 func ParseToken(tokenString string, secret string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {

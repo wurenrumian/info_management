@@ -27,10 +27,10 @@ func (h *AdminLogHandler) ListLogs(c *gin.Context) {
 		response.Error(c, 403, "forbidden")
 		return
 	}
-	logs, err := h.logRepo.List(20, 0)
+	logs, total, err := h.logRepo.ListWithTotal(20, 0)
 	if err != nil {
 		response.Error(c, 500, "list logs failed")
 		return
 	}
-	response.OK(c, logs)
+	response.List(c, logs, total)
 }

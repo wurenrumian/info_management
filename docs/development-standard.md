@@ -275,11 +275,23 @@ Phase 2 并行开发要求：
 - 可复用的联调脚本应提交到仓库，避免个人本地散落脚本
 - 脚本必须通过环境变量接收可变参数，不得硬编码生产凭据
 - 脚本只提交源码，不提交运行产物（例如上传目录内文件）
+- 环境变量加载脚本（如 `export.sh`）必须使用 `source` 执行，不能直接 `./export.sh`
 
-当前知识库联调脚本：
-- `scripts/dev/make_demo_knowledge_files.sh`（生成联调用 docx/xlsx）
-- `scripts/dev/knowledge_api_curl.sh`（调用知识库导入/搜索/详情/更新/删除接口，包含基础断言）
-- `scripts/dev/knowledge_repo_kingbase_integration.sh`（运行知识库金仓集成测试）
+推荐联调顺序（本地）：
+1. `source ./scripts/dev/export.sh`
+2. `./scripts/dev/prepare_upload_dirs.sh`
+3. 按模块执行对应 `*_curl.sh`
+
+当前联调脚本：
+- `scripts/dev/export.sh`（加载本地开发数据库 DSN 环境变量）
+- `scripts/dev/prepare_upload_dirs.sh`（准备上传目录权限，避免上传失败）
+- `scripts/dev/dev_login_curl.sh`（调用 dev 登录接口并打印 token）
+- `scripts/dev/dev_login_export.sh`（输出 `export DEV_TOKEN=...` 便于注入后续请求）
+- `scripts/dev/make_demo_knowledge_files.sh`（生成知识库导入测试文件：docx/xlsx/pdf）
+- `scripts/dev/knowledge_api_curl.sh`（知识库导入/搜索/详情/更新/删除全链路联调）
+- `scripts/dev/upload_api_curl.sh`（文件上传/列表/详情/下载/权限校验/删除全链路联调）
+- `scripts/dev/kingbase_docker_up.sh`（启动本地 Kingbase 容器）
+- `scripts/dev/kingbase_docker_down.sh`（清理本地 Kingbase 容器）
 
 ---
 

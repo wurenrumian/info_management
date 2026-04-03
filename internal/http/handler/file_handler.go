@@ -10,32 +10,31 @@ import (
 	"gorm.io/gorm"
 
 	"manage/internal/auth"
+	"manage/internal/config"
 	"manage/internal/http/response"
 	"manage/internal/model"
 	"manage/internal/repo"
+	"manage/internal/service/audit"
 	"manage/internal/service/authz"
 	"manage/internal/service/upload"
 )
 
 // FileHandler handles generic file upload/download APIs.
 type FileHandler struct {
-	svc       *upload.Service
-	repo      *repo.DocumentRepo
-	logRepo   *repo.AdminLogRepo
-	uploadDir string
+	svc         *upload.Service
+	repo        *repo.DocumentRepo
+	auditLogger *audit.Logger
+	uploadDir   string
 }
 
 // NewFileHandler creates a file handler.
 func NewFileHandler(db *gorm.DB) *FileHandler {
-	uploadDir := os.Getenv("DOCUMENT_UPLOAD_DIR")
-	if uploadDir == "" {
-		uploadDir = "./data/uploads/documents"
-	}
+	uploadDir := config.DocumentUploadDir()
 	return &FileHandler{
-		svc:       upload.NewService(uploadDir),
-		repo:      repo.NewDocumentRepo(db),
-		logRepo:   repo.NewAdminLogRepo(db),
-		uploadDir: uploadDir,
+		svc:         upload.NewService(uploadDir),
+		repo:        repo.NewDocumentRepo(db),
+		auditLogger: audit.NewLogger(repo.NewAdminLogRepo(db)),
+		uploadDir:   uploadDir,
 	}
 }
 
@@ -201,13 +200,7 @@ func (h *FileHandler) Delete(c *gin.Context) {
 	// Best-effort physical file deletion
 	_ = os.Remove(filepath.Join(h.uploadDir, doc.FilePath))
 
-	_ = h.logRepo.Create(&model.AdminLog{
-		AdminID:    actor.UserID,
-		Action:     "document.delete",
-		TargetType: "document",
-		TargetID:   uint(id64),
-		IPAddress:  c.ClientIP(),
-	})
+	h.auditLogger.Log(c, actor, "document.delete", "document", uint(id64))
 
 	response.OK(c, gin.H{"deleted": true})
 }

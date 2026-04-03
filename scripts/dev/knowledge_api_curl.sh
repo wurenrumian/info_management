@@ -21,6 +21,13 @@ DOCX_FILE="${DOCX_FILE:-/tmp/knowledge_demo.docx}"
 XLSX_FILE="${XLSX_FILE:-/tmp/knowledge_demo.xlsx}"
 PDF_FILE="${PDF_FILE:-/tmp/knowledge_demo.pdf}"
 
+for cmd in curl openssl sed; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "$cmd command not found"
+    exit 1
+  fi
+done
+
 generate_token() {
   local user_id="$1"
   local role="$2"
@@ -69,6 +76,10 @@ assert_contains_any() {
 
 if [[ ! -f "$DOCX_FILE" ]]; then
   echo "DOCX_FILE not found: $DOCX_FILE"
+  exit 1
+fi
+if [[ ! -f "$XLSX_FILE" ]]; then
+  echo "XLSX_FILE not found: $XLSX_FILE"
   exit 1
 fi
 if [[ ! -f "$PDF_FILE" ]]; then

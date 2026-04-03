@@ -2,6 +2,7 @@ package profile
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -37,6 +38,24 @@ func TestPatchMeMergesProfileAttrs(t *testing.T) {
 	require.Equal(t, "blue", attrs["theme"])
 	require.Equal(t, "https://example.com/a.png", attrs["avatar_url"])
 	require.Equal(t, "new bio", attrs["bio"])
+}
+
+func TestPatchMeReturnsErrEmptyPatchSentinel(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	svc := NewService(db)
+
+	require.NoError(t, db.Create(&model.User{
+		ID:        100,
+		StudentID: "S100",
+		Name:      "张三",
+		Role:      model.RoleStudent,
+		ClassID:   1,
+		Grade:     "2023",
+	}).Error)
+
+	err := svc.PatchMe(100, nil, nil)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, ErrEmptyPatch))
 }
 
 func TestGetHomeReturnsKnowledgeCountAndWechatBoundFlag(t *testing.T) {
