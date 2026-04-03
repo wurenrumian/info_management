@@ -204,3 +204,63 @@ func TestDevLoginAndSendSubscribeCheckCreatesSubscription(t *testing.T) {
 	require.NotNil(t, user.OpenID)
 	require.Equal(t, "dev-openid-s100", *user.OpenID)
 }
+
+func TestPublicRegisterCreatesUserWhenMissing(t *testing.T) {
+	db, r := setupWechatTestRouter(t)
+
+	body := []byte(`{"student_id":"S300","name":"李四"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/public-register", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), `"token"`)
+	require.Contains(t, w.Body.String(), `"student_id":"S300"`)
+	require.Contains(t, w.Body.String(), `"name":"李四"`)
+
+	var user model.User
+	require.NoError(t, db.Where("student_id = ?", "S300").First(&user).Error)
+	require.Equal(t, "李四", user.Name)
+	require.Equal(t, model.RoleStudent, user.Role)
+}
+
+func TestPublicRegisterReturnsTokenForExistingUser(t *testing.T) {
+	_, r := setupWechatTestRouter(t)
+
+	body := []byte(`{"student_id":"S100","name":"张三"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/public-register", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), `"token"`)
+	require.Contains(t, w.Body.String(), `"student_id":"S100"`)
+}
+
+func TestPublicRegisterNameMismatch(t *testing.T) {
+	_, r := setupWechatTestRouter(t)
+
+	body := []byte(`{"student_id":"S100","name":"王五"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/public-register", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusUnauthorized, w.Code)
+	require.Contains(t, w.Body.String(), "student id and name do not match")
+}
+
+func TestPublicRegisterMissingFields(t *testing.T) {
+	_, r := setupWechatTestRouter(t)
+
+	body := []byte(`{"student_id":"S100"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/public-register", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.Contains(t, w.Body.String(), "missing student_id or name")
+}

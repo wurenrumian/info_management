@@ -32,7 +32,7 @@ POST /api/v1/admin/notification/templates
 
 **响应**：
 
-- `201 Created`：创建成功，返回模板对象
+- `200 OK`：创建成功，返回模板对象
 - `400 Bad Request`：参数缺失
 - `403 Forbidden`：无权限
 - `500 Internal Server Error`：服务器错误

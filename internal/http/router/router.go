@@ -41,6 +41,7 @@ func New(db *gorm.DB) *gin.Engine {
 
 	notifSvc := initNotificationSvc(db)
 	wechatHandler := handler.NewWechatHandler(db, appID, appSecret, jwtSecret, notifSvc)
+	api.POST("/auth/public-register", wechatHandler.PublicRegister)
 	api.POST("/wechat/login", wechatHandler.Login)
 	api.POST("/wechat/bind", middleware.OptionalJWTAuth(jwtSecret), wechatHandler.Bind)
 	api.POST("/dev/register-or-login", wechatHandler.DevRegisterOrLogin)
