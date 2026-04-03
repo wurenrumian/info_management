@@ -205,6 +205,33 @@ func TestDevLoginAndSendSubscribeCheckCreatesSubscription(t *testing.T) {
 	require.Equal(t, "dev-openid-s100", *user.OpenID)
 }
 
+func TestDevLoginAndSendSubscribeCheckFillsLoginTemplateDefaults(t *testing.T) {
+	t.Setenv("APP_ENV", "dev")
+	t.Setenv("WECHAT_SUBSCRIBE_MSG_ENABLED", "false")
+
+	_, r := setupWechatTestRouter(t)
+
+	body := []byte(`{
+		"student_id":"S100",
+		"template_code":"loging_notification",
+		"wechat_template_id":"tmpl_login_notification",
+		"status":"accept",
+		"open_id":"dev-openid-s100",
+		"template_data":{
+			"thing1":{"value":"登录提醒"},
+			"time2":{"value":""}
+		}
+	}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/dev/login-and-send-subscribe-check", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "203.0.113.10:4567"
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), `"send_ok":true`)
+}
+
 func TestPublicRegisterCreatesUserWhenMissing(t *testing.T) {
 	db, r := setupWechatTestRouter(t)
 
@@ -223,6 +250,11 @@ func TestPublicRegisterCreatesUserWhenMissing(t *testing.T) {
 	require.NoError(t, db.Where("student_id = ?", "S300").First(&user).Error)
 	require.Equal(t, "李四", user.Name)
 	require.Equal(t, model.RoleStudent, user.Role)
+	require.NotZero(t, user.ClassID)
+
+	var class model.Class
+	require.NoError(t, db.First(&class, user.ClassID).Error)
+	require.Equal(t, "未绑定班级", class.ClassName)
 }
 
 func TestPublicRegisterReturnsTokenForExistingUser(t *testing.T) {
