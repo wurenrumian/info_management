@@ -17,7 +17,7 @@ services:
       - ./license_71193_0.dat:/home/system/license_71193_0.dat:ro
       - kingbase_data:/home/kingbase/userdata
     healthcheck:
-      test: ["CMD-SHELL", "ksql -U system -d test -p 54321 -c \"SELECT 1\" >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "ksql -U system -d kingbase -p 54321 -c \"SELECT 1\" >/dev/null 2>&1 || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -42,7 +42,7 @@ services:
       PORT: "8080"
       DOCUMENT_UPLOAD_DIR: /data/uploads/documents
       # 默认使用团队开发约定账号密码；可在 .env 覆盖
-      DATABASE_DSN: ${DATABASE_DSN:-host=kingbase port=54321 user=system password=123456 dbname=test sslmode=disable}
+      DATABASE_DSN: ${DATABASE_DSN:-host=kingbase port=54321 user=system password=123456 dbname=kingbase sslmode=disable}
     volumes:
       - ./data/uploads/documents:/data/uploads/documents
       - ./license_71193_0.dat:/certs/kingbase.dat:ro
