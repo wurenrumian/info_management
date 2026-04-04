@@ -19,12 +19,6 @@ func New(db *gorm.DB) *gin.Engine {
 	uploadDir := config.DocumentUploadDir()
 	r.Static("/uploads/documents", uploadDir)
 
-	// Backward compat: knowledge uploads
-	knowledgeDir := config.KnowledgeUploadDir()
-	if knowledgeDir != "" {
-		r.Static("/uploads/knowledge", knowledgeDir)
-	}
-
 	jwtSecret := config.JWTSecret()
 	appID := config.WechatAppID()
 	appSecret := config.WechatAppSecret()

@@ -43,18 +43,8 @@ func DocumentUploadDir() string {
 	return getEnv("DOCUMENT_UPLOAD_DIR", defaultUploadDir)
 }
 
-func KnowledgeUploadDir() string {
-	return strings.TrimSpace(os.Getenv("KNOWLEDGE_UPLOAD_DIR"))
-}
-
 func PrimaryUploadDir() string {
-	if v := strings.TrimSpace(os.Getenv("DOCUMENT_UPLOAD_DIR")); v != "" {
-		return v
-	}
-	if v := strings.TrimSpace(os.Getenv("KNOWLEDGE_UPLOAD_DIR")); v != "" {
-		return v
-	}
-	return defaultUploadDir
+	return getEnv("DOCUMENT_UPLOAD_DIR", defaultUploadDir)
 }
 
 func IsDevEnv() bool {
