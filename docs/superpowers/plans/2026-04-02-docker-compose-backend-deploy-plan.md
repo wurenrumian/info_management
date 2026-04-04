@@ -174,9 +174,9 @@ DOCUMENT_UPLOAD_DIR=/data/uploads/documents
 
 # 数据库连接（Kingbase/PostgreSQL compatible）
 # 证书模式示例（推荐）:
-# DATABASE_DSN=host=host.docker.internal port=54321 user=system password=123456 dbname=test sslmode=verify-ca sslrootcert=/certs/kingbase.dat
+# DATABASE_DSN=host=host.docker.internal port=54321 user=system password=123456 dbname=kingbase sslmode=verify-ca sslrootcert=/certs/kingbase.dat
 # 非证书模式示例（仅联调排障）:
-# DATABASE_DSN=host=host.docker.internal port=54321 user=system password=123456 dbname=test sslmode=disable
+# DATABASE_DSN=host=host.docker.internal port=54321 user=system password=123456 dbname=kingbase sslmode=disable
 DATABASE_DSN=
 ```
 

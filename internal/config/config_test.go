@@ -14,19 +14,13 @@ func TestJWTSecretUsesEnvOrDefault(t *testing.T) {
 	}
 }
 
-func TestPrimaryUploadDirPrefersDocumentThenKnowledgeThenDefault(t *testing.T) {
+func TestPrimaryUploadDirPrefersDocumentThenDefault(t *testing.T) {
 	t.Setenv("DOCUMENT_UPLOAD_DIR", "/tmp/documents")
-	t.Setenv("KNOWLEDGE_UPLOAD_DIR", "/tmp/knowledge")
 	if got := PrimaryUploadDir(); got != "/tmp/documents" {
 		t.Fatalf("PrimaryUploadDir() = %q, want %q", got, "/tmp/documents")
 	}
 
 	t.Setenv("DOCUMENT_UPLOAD_DIR", "")
-	if got := PrimaryUploadDir(); got != "/tmp/knowledge" {
-		t.Fatalf("PrimaryUploadDir() = %q, want %q", got, "/tmp/knowledge")
-	}
-
-	t.Setenv("KNOWLEDGE_UPLOAD_DIR", "")
 	if got := PrimaryUploadDir(); got != "./data/uploads/documents" {
 		t.Fatalf("PrimaryUploadDir() = %q, want default", got)
 	}

@@ -24,13 +24,13 @@
 团队开发环境（Kingbase 本地/测试容器）统一约定：
 - 用户名：`system`
 - 密码：`123456`
-- 数据库：`test`
+- 数据库：`kingbase`
 - 端口：`54321`
 - 证书：使用金仓提供的根目录 `.dat` 根证书文件（本机路径）
 
 推荐 `DATABASE_DSN` 写法（开发环境参考）：
 ```bash
-export DATABASE_DSN='host=127.0.0.1 port=54321 user=system password=123456 dbname=test sslmode=verify-ca sslrootcert=/path/to/root.dat'
+export DATABASE_DSN='host=127.0.0.1 port=54321 user=system password=123456 dbname=kingbase sslmode=verify-ca sslrootcert=/path/to/root.dat'
 ```
 
 说明：
@@ -185,7 +185,7 @@ db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 
 金仓集成测试（长期建议）：
 ```bash
-KINGBASE_DSN='host=127.0.0.1 port=54321 user=system password=123456 dbname=test sslmode=disable' \
+KINGBASE_DSN='host=127.0.0.1 port=54321 user=system password=123456 dbname=kingbase sslmode=disable' \
 go test ./internal/repo -tags=integration -run TestKnowledgeRepoSearchWithKingbase -count=1
 ```
 说明：
@@ -200,7 +200,7 @@ go test ./internal/repo -tags=integration -run TestKnowledgeRepoSearchWithKingba
 - Windows 本机金仓场景：DSN 优先使用 `host=127.0.0.1`；若 WSL 无法直连，再改用 `host=host.docker.internal` 或实际 Windows IP
 - 证书场景：统一使用金仓根目录 `.dat` 根证书文件，参考写法：
 ```bash
-KINGBASE_DSN='host=127.0.0.1 port=54321 user=system password=123456 dbname=test sslmode=verify-ca sslrootcert=/path/to/root.dat'
+KINGBASE_DSN='host=127.0.0.1 port=54321 user=system password=123456 dbname=kingbase sslmode=verify-ca sslrootcert=/path/to/root.dat'
 ```
 - 集成测试通过标准：测试中需至少覆盖“建表/迁移 + 插入 + 检索命中 + 检索无命中”完整链路
 
