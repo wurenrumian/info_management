@@ -101,7 +101,7 @@
 - `PATCH /api/v1/admin/knowledge/:id`
 - `DELETE /api/v1/admin/knowledge/:id`
 
-权限：`role >= 2`
+权限：`role >= 2`（删除相关接口要求 `role >= 3`）
 
 ### GET /api/v1/admin/knowledge
 
@@ -214,6 +214,8 @@
 
 ### DELETE /api/v1/admin/knowledge/:id
 
+权限：`role >= 3`
+
 成功响应：
 
 ```json
@@ -292,6 +294,8 @@
 ```
 
 ### DELETE /api/v1/admin/knowledge/:id/attachments/:file_id
+
+权限：`role >= 3`
 
 成功响应：
 

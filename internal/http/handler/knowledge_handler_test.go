@@ -116,7 +116,7 @@ func TestAdminKnowledgeDeleteByID(t *testing.T) {
 	require.NoError(t, db.Where("question = ?", "休学申请怎么办理").First(&existing).Error)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/knowledge/"+strconv.Itoa(int(existing.ID)), nil)
-	token := testutil.GenerateTestToken(200, 2, 0, "")
+	token := testutil.GenerateTestToken(300, 3, 0, "")
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -134,11 +134,26 @@ func TestAdminKnowledgeDeleteByID(t *testing.T) {
 	require.Equal(t, existing.ID, logs[0].TargetID)
 }
 
+func TestAdminKnowledgeDeleteByIDForbiddenForCadre(t *testing.T) {
+	db, r := setupKnowledgeTestRouter(t)
+	var existing model.KnowledgeItem
+	require.NoError(t, db.Where("question = ?", "休学申请怎么办理").First(&existing).Error)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/knowledge/"+strconv.Itoa(int(existing.ID)), nil)
+	token := testutil.GenerateTestToken(200, 2, 0, "")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusForbidden, w.Code)
+	require.Contains(t, w.Body.String(), "forbidden")
+}
+
 func TestAdminKnowledgeDeleteByIDNotFound(t *testing.T) {
 	_, r := setupKnowledgeTestRouter(t)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/knowledge/99999", nil)
-	token := testutil.GenerateTestToken(200, 2, 0, "")
+	token := testutil.GenerateTestToken(300, 3, 0, "")
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -334,7 +349,7 @@ func TestAdminKnowledgeDeleteAttachment(t *testing.T) {
 	require.NoError(t, db.Create(&model.KnowledgeAttachment{KnowledgeID: existing.ID, FileID: doc.ID, CreatedBy: 200}).Error)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/knowledge/"+strconv.Itoa(int(existing.ID))+"/attachments/"+strconv.Itoa(int(doc.ID)), nil)
-	token := testutil.GenerateTestToken(200, 2, 0, "")
+	token := testutil.GenerateTestToken(300, 3, 0, "")
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)

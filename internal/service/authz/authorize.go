@@ -25,7 +25,6 @@ func Authorize(role int, action string) bool {
 			action == ActionKnowledgeGet ||
 			action == ActionKnowledgeCreate ||
 			action == ActionKnowledgePatch ||
-			action == ActionKnowledgeDelete ||
 			action == ActionClassesList ||
 			action == ActionClassesGet ||
 			action == ActionFilesUpload ||
