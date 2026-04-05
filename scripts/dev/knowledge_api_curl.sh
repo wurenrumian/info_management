@@ -70,6 +70,7 @@ upload_file() {
   local resp
   resp="$(curl -s -X POST "$BASE_URL/api/v1/files/upload" \
     -H "Authorization: Bearer $ADMIN_TOKEN" \
+    -F "scene=knowledge" \
     -F "file=@$file_path")"
   echo "$resp"
   local file_id
@@ -143,7 +144,7 @@ echo "$files_search_docx_resp"
 assert_contains "$files_search_docx_resp" '"total":' "files search has total"
 assert_contains "$files_search_docx_resp" "综测排名证明" "files search docx snippet hit"
 assert_contains "$files_search_docx_resp" "\"id\":$docx_file_id" "files search includes docx file id"
-assert_contains "$files_search_docx_resp" '"/uploads/documents/' "files search includes file url"
+assert_contains "$files_search_docx_resp" '"/uploads/knowledge/' "files search includes file url"
 echo
 
 if [[ "$SKIP_PDF" -eq 0 ]]; then

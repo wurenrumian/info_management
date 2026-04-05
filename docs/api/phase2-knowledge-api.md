@@ -35,7 +35,15 @@
       "question": "休学申请怎么办理",
       "answer": "先联系辅导员并提交休学申请表",
       "keywords": ["休学", "申请"],
-      "attachments": [{"title": "休学申请表", "url": "https://example.com/leave"}],
+      "attachments": [
+        {
+          "file_id": 10,
+          "title": "休学申请表.docx",
+          "url": "/uploads/knowledge/2026/04/1712000000000000000_leave.docx",
+          "content_type": "application/msword",
+          "file_size": 10240
+        }
+      ],
       "created_by": 999,
       "updated_by": 999,
       "created_at": "2026-03-31T00:00:00Z",
@@ -107,7 +115,15 @@
       "question": "复学流程是什么",
       "answer": "提交复学申请并等待审批",
       "keywords": ["复学", "审批"],
-      "attachments": [{"title": "复学指引", "url": "https://example.com/back"}],
+      "attachments": [
+        {
+          "file_id": 21,
+          "title": "复学指引.pdf",
+          "url": "/uploads/knowledge/2026/04/1712000000000000001_back.pdf",
+          "content_type": "application/pdf",
+          "file_size": 20480
+        }
+      ],
       "created_by": 200,
       "updated_by": 200,
       "created_at": "2026-03-31T00:00:00Z",
@@ -129,7 +145,15 @@
     "question": "复学流程是什么",
     "answer": "提交复学申请并等待审批",
     "keywords": ["复学", "审批"],
-    "attachments": [{"title": "复学指引", "url": "https://example.com/back"}],
+    "attachments": [
+      {
+        "file_id": 21,
+        "title": "复学指引.pdf",
+        "url": "/uploads/knowledge/2026/04/1712000000000000001_back.pdf",
+        "content_type": "application/pdf",
+        "file_size": 20480
+      }
+    ],
     "created_by": 200,
     "updated_by": 200,
     "created_at": "2026-03-31T00:00:00Z",
@@ -146,8 +170,7 @@
 {
   "question": "复学流程是什么",
   "answer": "提交复学申请并等待审批",
-  "keywords": ["复学", "审批"],
-  "attachments": [{"title": "复学指引", "url": "https://example.com/back"}]
+  "keywords": ["复学", "审批"]
 }
 ```
 
@@ -160,7 +183,7 @@
     "question": "复学流程是什么",
     "answer": "提交复学申请并等待审批",
     "keywords": ["复学", "审批"],
-    "attachments": [{"title": "复学指引", "url": "https://example.com/back"}],
+    "attachments": [],
     "created_by": 200,
     "updated_by": 200,
     "created_at": "2026-03-31T00:00:00Z",
@@ -241,7 +264,7 @@
       {
         "file_id": 1,
         "title": "report.pdf",
-        "url": "/uploads/documents/2026/04/123_report.pdf",
+        "url": "/uploads/knowledge/2026/04/123_report.pdf",
         "content_type": "application/pdf",
         "file_size": 1048576
       }
@@ -260,7 +283,7 @@
     {
       "file_id": 1,
       "title": "report.pdf",
-      "url": "/uploads/documents/2026/04/123_report.pdf",
+      "url": "/uploads/knowledge/2026/04/123_report.pdf",
       "content_type": "application/pdf",
       "file_size": 1048576
     }
