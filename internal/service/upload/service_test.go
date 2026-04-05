@@ -30,10 +30,53 @@ func TestSaveFileSuccess(t *testing.T) {
 	require.Equal(t, "test.pdf", result.OriginalName)
 	require.Equal(t, "application/pdf", result.ContentType)
 	require.Equal(t, int64(16), result.FileSize)
+	require.Contains(t, result.FilePath, "documents/")
 	require.Contains(t, result.FilePath, "test.pdf")
 
 	_, err = os.Stat(filepath.Join(dir, result.FilePath))
 	require.NoError(t, err)
+}
+
+func TestSaveFileWithSceneAvatar(t *testing.T) {
+	dir := t.TempDir()
+	svc := NewService(dir)
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("file", "avatar.png")
+	require.NoError(t, err)
+	_, err = part.Write([]byte("fake-png-content"))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	_, header, err := readerFromForm(body, writer)
+	require.NoError(t, err)
+
+	result, err := svc.SaveFileWithScene(header, "avatar")
+	require.NoError(t, err)
+	require.Contains(t, result.FilePath, "avatars/")
+	require.Contains(t, result.FilePath, "avatar.png")
+}
+
+func TestSaveFileAutoRoutesImagesToImagesCategory(t *testing.T) {
+	dir := t.TempDir()
+	svc := NewService(dir)
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("file", "poster.jpg")
+	require.NoError(t, err)
+	_, err = part.Write([]byte("fake-jpg-content"))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	_, header, err := readerFromForm(body, writer)
+	require.NoError(t, err)
+
+	result, err := svc.SaveFile(header)
+	require.NoError(t, err)
+	require.Contains(t, result.FilePath, "images/")
+	require.Contains(t, result.FilePath, "poster.jpg")
 }
 
 func TestSaveFileRejectsLargeFile(t *testing.T) {

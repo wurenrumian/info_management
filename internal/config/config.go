@@ -7,7 +7,7 @@ import (
 
 const (
 	defaultJWTSecret  = "dev-secret-change-in-production"
-	defaultUploadDir  = "./data/uploads/documents"
+	defaultUploadDir  = "./data/uploads"
 	defaultServerPort = "8080"
 )
 

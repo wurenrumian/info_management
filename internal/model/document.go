@@ -9,6 +9,7 @@ type Document struct {
 	FilePath    string    `gorm:"type:varchar(500);not null" json:"file_path"`
 	FileSize    int64     `gorm:"not null" json:"file_size"`
 	ContentType string    `gorm:"type:varchar(100);not null" json:"content_type"`
+	ContentText string    `gorm:"type:text" json:"content_text"`
 	UploaderID  uint      `gorm:"index;not null" json:"uploader_id"`
 	CreatedAt   time.Time `json:"created_at"`
 }

@@ -3,7 +3,6 @@ package handler
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -20,25 +19,26 @@ import (
 	"manage/internal/service/audit"
 	"manage/internal/service/authz"
 	ksvc "manage/internal/service/knowledge"
-	"manage/internal/service/upload"
 )
 
 // AdminKnowledgeHandler handles knowledge management APIs.
 type AdminKnowledgeHandler struct {
-	svc         *ksvc.Service
-	auditLogger *audit.Logger
-	uploadSvc   *upload.Service
-	uploadDir   string
+	svc            *ksvc.Service
+	auditLogger    *audit.Logger
+	documentRepo   *repo.DocumentRepo
+	attachmentRepo *repo.KnowledgeAttachmentRepo
+	uploadDir      string
 }
 
 // NewAdminKnowledgeHandler creates an admin knowledge handler.
 func NewAdminKnowledgeHandler(db *gorm.DB) *AdminKnowledgeHandler {
 	uploadDir := config.PrimaryUploadDir()
 	return &AdminKnowledgeHandler{
-		svc:         ksvc.NewService(db),
-		auditLogger: audit.NewLogger(repo.NewAdminLogRepo(db)),
-		uploadSvc:   upload.NewService(uploadDir),
-		uploadDir:   uploadDir,
+		svc:            ksvc.NewService(db),
+		auditLogger:    audit.NewLogger(repo.NewAdminLogRepo(db)),
+		documentRepo:   repo.NewDocumentRepo(db),
+		attachmentRepo: repo.NewKnowledgeAttachmentRepo(db),
+		uploadDir:      uploadDir,
 	}
 }
 
@@ -54,6 +54,18 @@ type patchKnowledgeReq struct {
 	Answer      *string              `json:"answer"`
 	Keywords    *[]string            `json:"keywords"`
 	Attachments *[]map[string]string `json:"attachments"`
+}
+
+type bindAttachmentsReq struct {
+	FileIDs []uint `json:"file_ids"`
+}
+
+type attachmentResp struct {
+	FileID      uint   `json:"file_id"`
+	Title       string `json:"title"`
+	URL         string `json:"url"`
+	ContentType string `json:"content_type"`
+	FileSize    int64  `json:"file_size"`
 }
 
 // ListKnowledge lists knowledge items for admins.
@@ -72,6 +84,10 @@ func (h *AdminKnowledgeHandler) ListKnowledge(c *gin.Context) {
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 	items, total, err := h.svc.List(c.Query("query"), limit, offset)
 	if err != nil {
+		response.Error(c, 500, "list knowledge failed")
+		return
+	}
+	if err := h.hydrateKnowledgeItemsAttachments(items); err != nil {
 		response.Error(c, 500, "list knowledge failed")
 		return
 	}
@@ -105,6 +121,10 @@ func (h *AdminKnowledgeHandler) GetKnowledge(c *gin.Context) {
 		response.Error(c, 500, "get knowledge failed")
 		return
 	}
+	if err := h.hydrateKnowledgeItemAttachments(item); err != nil {
+		response.Error(c, 500, "get knowledge failed")
+		return
+	}
 	response.OK(c, item)
 }
 
@@ -131,17 +151,13 @@ func (h *AdminKnowledgeHandler) CreateKnowledge(c *gin.Context) {
 		response.Error(c, 400, "invalid keywords")
 		return
 	}
-	attachments, err := json.Marshal(req.Attachments)
-	if err != nil {
-		response.Error(c, 400, "invalid attachments")
-		return
-	}
 
+	emptyAttachments, _ := json.Marshal([]attachmentResp{})
 	item := model.KnowledgeItem{
 		Question:    strings.TrimSpace(req.Question),
 		Answer:      strings.TrimSpace(req.Answer),
 		Keywords:    datatypes.JSON(keywords),
-		Attachments: datatypes.JSON(attachments),
+		Attachments: datatypes.JSON(emptyAttachments),
 		CreatedBy:   actor.UserID,
 		UpdatedBy:   actor.UserID,
 	}
@@ -194,14 +210,6 @@ func (h *AdminKnowledgeHandler) PatchKnowledge(c *gin.Context) {
 		}
 		updates["keywords"] = datatypes.JSON(keywords)
 	}
-	if req.Attachments != nil {
-		attachments, err := json.Marshal(*req.Attachments)
-		if err != nil {
-			response.Error(c, 400, "invalid attachments")
-			return
-		}
-		updates["attachments"] = datatypes.JSON(attachments)
-	}
 	if len(updates) == 0 {
 		response.Error(c, 400, "empty patch")
 		return
@@ -221,59 +229,193 @@ func (h *AdminKnowledgeHandler) PatchKnowledge(c *gin.Context) {
 	response.OK(c, gin.H{"updated": true})
 }
 
-// ImportKnowledge imports one knowledge item with uploaded attachment files.
-func (h *AdminKnowledgeHandler) ImportKnowledge(c *gin.Context) {
+// BindAttachments explicitly binds documents to one knowledge item.
+func (h *AdminKnowledgeHandler) BindAttachments(c *gin.Context) {
 	actor, ok := auth.GetActor(c)
 	if !ok {
 		response.Error(c, 401, "unauthorized")
 		return
 	}
-	if !authz.Authorize(actor.Role, authz.ActionKnowledgeCreate) {
+	if !authz.Authorize(actor.Role, authz.ActionKnowledgePatch) {
 		response.Error(c, 403, "forbidden")
 		return
 	}
 
-	question := strings.TrimSpace(c.PostForm("question"))
-	answer := strings.TrimSpace(c.PostForm("answer"))
-	if question == "" || answer == "" {
-		response.Error(c, 400, "missing fields")
-		return
-	}
-
-	attachments, contentText, err := h.saveUploadedFiles(c)
+	id64, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		response.Error(c, 500, "upload failed")
+		response.Error(c, 400, "invalid id")
 		return
 	}
+	knowledgeID := uint(id64)
 
-	keywords := splitKeywords(c.PostForm("keywords"))
-	keywordsJSON, err := json.Marshal(keywords)
+	item, err := h.svc.GetByID(knowledgeID)
 	if err != nil {
-		response.Error(c, 400, "invalid keywords")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Error(c, 404, "knowledge not found")
+			return
+		}
+		response.Error(c, 500, "get knowledge failed")
 		return
 	}
-	attachmentsJSON, err := json.Marshal(attachments)
+
+	var req bindAttachmentsReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, 400, "invalid body")
+		return
+	}
+	fileIDs := dedupeUint(req.FileIDs)
+	if len(fileIDs) == 0 {
+		response.Error(c, 400, "missing file_ids")
+		return
+	}
+
+	docs, err := h.documentRepo.ListByIDs(fileIDs)
 	if err != nil {
-		response.Error(c, 400, "invalid attachments")
+		response.Error(c, 500, "get file failed")
+		return
+	}
+	if len(docs) != len(fileIDs) {
+		response.Error(c, 400, "file not found")
 		return
 	}
 
-	item := model.KnowledgeItem{
-		Question:    question,
-		Answer:      answer,
-		ContentText: contentText,
-		Keywords:    datatypes.JSON(keywordsJSON),
-		Attachments: datatypes.JSON(attachmentsJSON),
-		CreatedBy:   actor.UserID,
-		UpdatedBy:   actor.UserID,
+	existingRows, err := h.attachmentRepo.ListByKnowledgeID(knowledgeID)
+	if err != nil {
+		response.Error(c, 500, "list attachment failed")
+		return
 	}
-	if err := h.svc.Create(&item); err != nil {
-		response.Error(c, 500, "create knowledge failed")
+	existing := make(map[uint]struct{}, len(existingRows))
+	for _, row := range existingRows {
+		existing[row.FileID] = struct{}{}
+	}
+
+	toCreate := make([]model.KnowledgeAttachment, 0, len(fileIDs))
+	addedCount := 0
+	alreadyCount := 0
+	newDocs := make([]model.Document, 0, len(fileIDs))
+	docByID := make(map[uint]model.Document, len(docs))
+	for _, d := range docs {
+		docByID[d.ID] = d
+	}
+	for _, fileID := range fileIDs {
+		if _, ok := existing[fileID]; ok {
+			alreadyCount++
+			continue
+		}
+		addedCount++
+		toCreate = append(toCreate, model.KnowledgeAttachment{KnowledgeID: knowledgeID, FileID: fileID, CreatedBy: actor.UserID})
+		newDocs = append(newDocs, docByID[fileID])
+	}
+	if err := h.attachmentRepo.CreateBatch(toCreate); err != nil {
+		response.Error(c, 500, "bind attachment failed")
 		return
 	}
 
-	h.auditLogger.Log(c, actor, "knowledge.import", "knowledge", item.ID)
-	response.OK(c, item)
+	if addedCount > 0 {
+		additional := extractTextFromDocuments(h.uploadDir, newDocs)
+		merged := mergeContentText(item.ContentText, additional)
+		if merged != item.ContentText {
+			if err := h.svc.Patch(knowledgeID, map[string]any{"content_text": merged, "updated_by": actor.UserID}); err != nil {
+				response.Error(c, 500, "patch knowledge failed")
+				return
+			}
+		}
+		h.auditLogger.Log(c, actor, "knowledge.attach", "knowledge", knowledgeID)
+	}
+
+	attachments, err := h.listAttachmentDetailsByKnowledgeID(knowledgeID)
+	if err != nil {
+		response.Error(c, 500, "list attachment failed")
+		return
+	}
+	response.OK(c, gin.H{
+		"added_count":   addedCount,
+		"already_count": alreadyCount,
+		"attachments":   attachments,
+	})
+}
+
+// ListAttachments lists explicit attachment relations for one knowledge item.
+func (h *AdminKnowledgeHandler) ListAttachments(c *gin.Context) {
+	actor, ok := auth.GetActor(c)
+	if !ok {
+		response.Error(c, 401, "unauthorized")
+		return
+	}
+	if !authz.Authorize(actor.Role, authz.ActionKnowledgeGet) {
+		response.Error(c, 403, "forbidden")
+		return
+	}
+
+	id64, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(c, 400, "invalid id")
+		return
+	}
+	knowledgeID := uint(id64)
+
+	if _, err := h.svc.GetByID(knowledgeID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Error(c, 404, "knowledge not found")
+			return
+		}
+		response.Error(c, 500, "get knowledge failed")
+		return
+	}
+
+	attachments, err := h.listAttachmentDetailsByKnowledgeID(knowledgeID)
+	if err != nil {
+		response.Error(c, 500, "list attachment failed")
+		return
+	}
+	response.OK(c, attachments)
+}
+
+// DeleteAttachment detaches one document from one knowledge item.
+func (h *AdminKnowledgeHandler) DeleteAttachment(c *gin.Context) {
+	actor, ok := auth.GetActor(c)
+	if !ok {
+		response.Error(c, 401, "unauthorized")
+		return
+	}
+	if !authz.Authorize(actor.Role, authz.ActionKnowledgeDelete) {
+		response.Error(c, 403, "forbidden")
+		return
+	}
+
+	id64, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(c, 400, "invalid id")
+		return
+	}
+	fileID64, err := strconv.ParseUint(c.Param("file_id"), 10, 64)
+	if err != nil {
+		response.Error(c, 400, "invalid file_id")
+		return
+	}
+	knowledgeID := uint(id64)
+	fileID := uint(fileID64)
+
+	if _, err := h.svc.GetByID(knowledgeID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Error(c, 404, "knowledge not found")
+			return
+		}
+		response.Error(c, 500, "get knowledge failed")
+		return
+	}
+
+	if err := h.attachmentRepo.DeleteByKnowledgeAndFileID(knowledgeID, fileID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Error(c, 404, "attachment not found")
+			return
+		}
+		response.Error(c, 500, "delete attachment failed")
+		return
+	}
+
+	h.auditLogger.Log(c, actor, "knowledge.detach", "knowledge", knowledgeID)
+	response.OK(c, gin.H{"deleted": true})
 }
 
 // DeleteKnowledge deletes one knowledge item by id.
@@ -307,46 +449,109 @@ func (h *AdminKnowledgeHandler) DeleteKnowledge(c *gin.Context) {
 	response.OK(c, gin.H{"deleted": true})
 }
 
-func splitKeywords(raw string) []string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return []string{}
+func (h *AdminKnowledgeHandler) listAttachmentDetailsByKnowledgeID(knowledgeID uint) ([]attachmentResp, error) {
+	rows, err := h.attachmentRepo.ListByKnowledgeID(knowledgeID)
+	if err != nil {
+		return nil, err
 	}
-	parts := strings.Split(raw, ",")
-	out := make([]string, 0, len(parts))
-	for _, part := range parts {
-		s := strings.TrimSpace(part)
-		if s != "" {
-			out = append(out, s)
+	if len(rows) == 0 {
+		return []attachmentResp{}, nil
+	}
+	fileIDs := make([]uint, 0, len(rows))
+	for _, row := range rows {
+		fileIDs = append(fileIDs, row.FileID)
+	}
+	docs, err := h.documentRepo.ListByIDs(fileIDs)
+	if err != nil {
+		return nil, err
+	}
+	docByID := make(map[uint]model.Document, len(docs))
+	for _, d := range docs {
+		docByID[d.ID] = d
+	}
+	out := make([]attachmentResp, 0, len(rows))
+	for _, row := range rows {
+		doc, ok := docByID[row.FileID]
+		if !ok {
+			continue
 		}
+		out = append(out, toAttachmentResp(doc))
+	}
+	return out, nil
+}
+
+func (h *AdminKnowledgeHandler) hydrateKnowledgeItemAttachments(item *model.KnowledgeItem) error {
+	attachments, err := h.listAttachmentDetailsByKnowledgeID(item.ID)
+	if err != nil {
+		return err
+	}
+	b, err := json.Marshal(attachments)
+	if err != nil {
+		return err
+	}
+	item.Attachments = datatypes.JSON(b)
+	return nil
+}
+
+func (h *AdminKnowledgeHandler) hydrateKnowledgeItemsAttachments(items []model.KnowledgeItem) error {
+	if len(items) == 0 {
+		return nil
+	}
+	for i := range items {
+		if err := h.hydrateKnowledgeItemAttachments(&items[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func toAttachmentResp(d model.Document) attachmentResp {
+	return attachmentResp{
+		FileID:      d.ID,
+		Title:       d.Title,
+		URL:         "/uploads/" + d.FilePath,
+		ContentType: d.ContentType,
+		FileSize:    d.FileSize,
+	}
+}
+
+func dedupeUint(ids []uint) []uint {
+	seen := map[uint]struct{}{}
+	out := make([]uint, 0, len(ids))
+	for _, id := range ids {
+		if id == 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
 	}
 	return out
 }
 
-func (h *AdminKnowledgeHandler) saveUploadedFiles(c *gin.Context) ([]map[string]string, string, error) {
-	form, err := c.MultipartForm()
-	if err != nil {
-		return nil, "", fmt.Errorf("invalid multipart form")
+func extractTextFromDocuments(uploadDir string, docs []model.Document) string {
+	parts := make([]string, 0, len(docs))
+	for _, doc := range docs {
+		if text := ksvc.ExtractTextFromFile(filepath.Join(uploadDir, doc.FilePath)); text != "" {
+			parts = append(parts, text)
+		}
 	}
-	files := form.File["files"]
-	if len(files) == 0 {
-		return nil, "", fmt.Errorf("missing files")
-	}
+	return strings.Join(parts, " ")
+}
 
-	attachments := make([]map[string]string, 0, len(files))
-	textParts := make([]string, 0, len(files))
-	for _, file := range files {
-		result, err := h.uploadSvc.SaveFile(file)
-		if err != nil {
-			return nil, "", err
-		}
-		attachments = append(attachments, map[string]string{
-			"title": file.Filename,
-			"url":   "/uploads/documents/" + result.FilePath,
-		})
-		if text := ksvc.ExtractTextFromFile(filepath.Join(h.uploadDir, result.FilePath)); text != "" {
-			textParts = append(textParts, text)
-		}
+func mergeContentText(oldText, additional string) string {
+	oldText = strings.TrimSpace(oldText)
+	additional = strings.TrimSpace(additional)
+	if oldText == "" {
+		return additional
 	}
-	return attachments, strings.Join(textParts, " "), nil
+	if additional == "" {
+		return oldText
+	}
+	if strings.Contains(oldText, additional) {
+		return oldText
+	}
+	return oldText + " " + additional
 }

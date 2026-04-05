@@ -11,6 +11,7 @@
 ## Student Endpoint
 
 - `GET /api/v1/knowledge/search?q=...&limit=20&offset=0`
+- `GET /api/v1/knowledge/:id`
 
 权限：`role >= 1`
 
@@ -18,7 +19,7 @@
 - `question`
 - `answer`
 - `keywords`
-- `content_text`（由导入文件抽取出的正文文本）
+- `content_text`（由已绑定附件抽取出的正文文本）
 
 检索策略（当前实现）：
 - 先进行全文检索（FTS）
@@ -48,15 +49,47 @@
 错误响应：
 
 - `400 {"error":"missing q"}`
+- `400 {"error":"invalid id"}`
 - `401 {"error":"unauthorized"}`
 - `403 {"error":"forbidden"}`
+- `404 {"error":"knowledge not found"}`
+
+### GET /api/v1/knowledge/:id
+
+成功响应：
+
+```json
+{
+  "data": {
+    "id": 1,
+    "question": "休学申请怎么办理",
+    "answer": "先联系辅导员并提交休学申请表",
+    "keywords": ["休学", "申请"],
+    "attachments": [
+      {
+        "file_id": 10,
+        "title": "休学申请表.docx",
+        "url": "/uploads/knowledge/2026/04/1712000000000000000_leave.docx",
+        "content_type": "application/msword",
+        "file_size": 10240
+      }
+    ],
+    "created_by": 999,
+    "updated_by": 999,
+    "created_at": "2026-03-31T00:00:00Z",
+    "updated_at": "2026-03-31T00:00:00Z"
+  }
+}
+```
 
 ## Admin Endpoints
 
 - `GET /api/v1/admin/knowledge?query=...&limit=20&offset=0`
 - `GET /api/v1/admin/knowledge/:id`
 - `POST /api/v1/admin/knowledge`
-- `POST /api/v1/admin/knowledge/import`（multipart 上传文件并入库）
+- `POST /api/v1/admin/knowledge/:id/attachments`（批量绑定附件）
+- `GET /api/v1/admin/knowledge/:id/attachments`（查询已绑定附件）
+- `DELETE /api/v1/admin/knowledge/:id/attachments/:file_id`（解绑单个附件）
 - `PATCH /api/v1/admin/knowledge/:id`
 - `DELETE /api/v1/admin/knowledge/:id`
 
@@ -168,39 +201,13 @@
 }
 ```
 
-### POST /api/v1/admin/knowledge/import
-
-`Content-Type: multipart/form-data`
-
-表单字段：
-- `question`：问题（必填）
-- `answer`：答案（必填）
-- `keywords`：逗号分隔关键词（可选，如 `奖学金,政策`）
-- `files`：附件文件（必填，可多文件）
-
-当前支持文件类型：
-- `pdf`（已支持正文抽取）
-- `doc`
-- `docx`
-- `xls`
-- `xlsx`
-
-成功后会自动生成附件链接，格式为：`/uploads/documents/<relative_path>`
-并在服务端尝试抽取文档正文写入 `content_text` 用于检索：
-- 已支持正文抽取：`docx`、`xlsx`、`pdf`
-- 当前不保证正文抽取：`doc`、`xls`（仍可作为附件导入与展示）
-
-PDF 正文抽取说明：
-- 需要 PDF 包含可复制文本层（非扫描件）
-- 逐页提取，合并空格；无文本则不影响附件保存
-
 管理端错误响应：
 
 - `400 {"error":"invalid body"}`
 - `400 {"error":"invalid id"}`
-- `400 {"error":"missing fields"}`
-- `400 {"error":"missing files"}`
-- `400 {"error":"unsupported file type"}`
+- `400 {"error":"missing file_ids"}`
+- `400 {"error":"file not found"}`
+- `400 {"error":"invalid file_id"}`
 - `400 {"error":"empty patch"}`
 - `401 {"error":"unauthorized"}`
 - `403 {"error":"forbidden"}`
@@ -209,6 +216,69 @@ PDF 正文抽取说明：
 - `500 {"error":"get knowledge failed"}`
 - `500 {"error":"patch knowledge failed"}`
 - `500 {"error":"delete knowledge failed"}`
+- `500 {"error":"bind attachment failed"}`
+- `500 {"error":"list attachment failed"}`
+- `500 {"error":"delete attachment failed"}`
+
+### POST /api/v1/admin/knowledge/:id/attachments
+
+请求体：
+
+```json
+{
+  "file_ids": [1, 2, 3]
+}
+```
+
+成功响应：
+
+```json
+{
+  "data": {
+    "added_count": 2,
+    "already_count": 1,
+    "attachments": [
+      {
+        "file_id": 1,
+        "title": "report.pdf",
+        "url": "/uploads/documents/2026/04/123_report.pdf",
+        "content_type": "application/pdf",
+        "file_size": 1048576
+      }
+    ]
+  }
+}
+```
+
+### GET /api/v1/admin/knowledge/:id/attachments
+
+成功响应：
+
+```json
+{
+  "data": [
+    {
+      "file_id": 1,
+      "title": "report.pdf",
+      "url": "/uploads/documents/2026/04/123_report.pdf",
+      "content_type": "application/pdf",
+      "file_size": 1048576
+    }
+  ]
+}
+```
+
+### DELETE /api/v1/admin/knowledge/:id/attachments/:file_id
+
+成功响应：
+
+```json
+{
+  "data": {
+    "deleted": true
+  }
+}
+```
 
 ## Audit Log
 
@@ -218,3 +288,5 @@ PDF 正文抽取说明：
 - `knowledge.import`
 - `knowledge.patch`
 - `knowledge.delete`
+- `knowledge.attach`
+- `knowledge.detach`

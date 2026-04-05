@@ -158,8 +158,7 @@ func (h *MeHandler) PatchMe(c *gin.Context) {
 	}
 	if req.AvatarURL != nil {
 		trimmed := strings.TrimSpace(*req.AvatarURL)
-		parsed, parseErr := url.Parse(trimmed)
-		if parseErr != nil || parsed == nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		if !isValidAvatarURL(trimmed) {
 			response.ErrorWithCode(c, 400, 40001, "avatar_url must be a valid http/https URL")
 			return
 		}
@@ -198,4 +197,15 @@ func (h *MeHandler) PatchMe(c *gin.Context) {
 
 func utf8Len(s string) int {
 	return len([]rune(s))
+}
+
+func isValidAvatarURL(raw string) bool {
+	if strings.HasPrefix(raw, "/uploads/") {
+		return true
+	}
+	parsed, parseErr := url.Parse(raw)
+	return parseErr == nil &&
+		parsed != nil &&
+		(parsed.Scheme == "http" || parsed.Scheme == "https") &&
+		parsed.Host != ""
 }

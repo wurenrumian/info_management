@@ -44,6 +44,11 @@ func NewService(baseDir string) *Service {
 
 // SaveFile saves an uploaded file and returns metadata.
 func (s *Service) SaveFile(file *multipart.FileHeader) (*SaveResult, error) {
+	return s.SaveFileWithScene(file, "")
+}
+
+// SaveFileWithScene saves an uploaded file using an optional business scene for directory routing.
+func (s *Service) SaveFileWithScene(file *multipart.FileHeader, scene string) (*SaveResult, error) {
 	if file.Size > maxFileSize {
 		return nil, fmt.Errorf("file too large")
 	}
@@ -55,7 +60,8 @@ func (s *Service) SaveFile(file *multipart.FileHeader) (*SaveResult, error) {
 
 	contentType := detectContentType(ext)
 	now := time.Now()
-	dir := filepath.Join(s.baseDir, fmt.Sprintf("%d", now.Year()), fmt.Sprintf("%02d", now.Month()))
+	category := resolveCategory(scene, ext)
+	dir := filepath.Join(s.baseDir, category, fmt.Sprintf("%d", now.Year()), fmt.Sprintf("%02d", now.Month()))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("prepare upload dir failed")
 	}
@@ -87,6 +93,26 @@ func (s *Service) SaveFile(file *multipart.FileHeader) (*SaveResult, error) {
 		FileSize:     file.Size,
 		ContentType:  contentType,
 	}, nil
+}
+
+func resolveCategory(scene, ext string) string {
+	switch strings.TrimSpace(strings.ToLower(scene)) {
+	case "avatar", "avatars":
+		return "avatars"
+	case "knowledge":
+		return "knowledge"
+	case "announcement", "announcements":
+		return "announcements"
+	case "document", "documents":
+		return "documents"
+	}
+
+	switch ext {
+	case ".jpg", ".jpeg", ".png":
+		return "images"
+	default:
+		return "documents"
+	}
 }
 
 func detectContentType(ext string) string {

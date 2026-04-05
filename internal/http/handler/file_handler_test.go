@@ -1,8 +1,10 @@
 package handler_test
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -55,6 +57,33 @@ func TestFileUploadSuccess(t *testing.T) {
 	require.NoError(t, db.Where("title = ?", "report.pdf").First(&doc).Error)
 	require.Equal(t, "application/pdf", doc.ContentType)
 	require.Equal(t, uint(100), doc.UploaderID)
+}
+
+func TestFileUploadWithScene(t *testing.T) {
+	db, r := setupFileTestRouter(t)
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	require.NoError(t, writer.WriteField("scene", "avatar"))
+	part, err := writer.CreateFormFile("file", "avatar.png")
+	require.NoError(t, err)
+	_, err = part.Write([]byte("fake-png-content"))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/files/upload", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	token := testutil.GenerateTestToken(100, 1, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), "avatar.png")
+
+	var doc model.Document
+	require.NoError(t, db.Where("title = ?", "avatar.png").First(&doc).Error)
+	require.Contains(t, doc.FilePath, "avatars/")
 }
 
 func TestFileDeleteForbiddenForStudent(t *testing.T) {
@@ -156,4 +185,91 @@ func TestFileGetByIDNotFound(t *testing.T) {
 
 	require.Equal(t, http.StatusNotFound, w.Code)
 	require.Contains(t, w.Body.String(), "file not found")
+}
+
+func TestFileSearchByContentText(t *testing.T) {
+	db, r := setupFileTestRouter(t)
+
+	require.NoError(t, db.Create(&model.Document{
+		Title:       "奖学金说明.docx",
+		FilePath:    "documents/2026/04/a.docx",
+		FileSize:    123,
+		ContentType: "application/msword",
+		ContentText: "奖学金申请需要提交综测排名证明和成绩单",
+		UploaderID:  100,
+	}).Error)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/files/search?q=综测排名证明", nil)
+	token := testutil.GenerateTestToken(100, 1, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), "奖学金说明.docx")
+	require.Contains(t, w.Body.String(), "\"url\":\"/uploads/documents/")
+	require.Contains(t, w.Body.String(), "综测排名证明")
+}
+
+func TestFileUploadExtractsContentTextForDocx(t *testing.T) {
+	db, r := setupFileTestRouter(t)
+	docxContent, err := buildDocxForFileUpload("奖学金申请需要提交综测排名证明")
+	require.NoError(t, err)
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("file", "scholarship.docx")
+	require.NoError(t, err)
+	_, err = part.Write(docxContent)
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/files/upload", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	token := testutil.GenerateTestToken(100, 1, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var doc model.Document
+	require.NoError(t, db.Where("title = ?", "scholarship.docx").First(&doc).Error)
+	require.Contains(t, doc.ContentText, "综测排名证明")
+}
+
+func buildDocxForFileUpload(text string) ([]byte, error) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+
+	files := map[string]string{
+		"[Content_Types].xml": `<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`,
+		"_rels/.rels": `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`,
+		"word/document.xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body><w:p><w:r><w:t>` + text + `</w:t></w:r></w:p></w:body>
+</w:document>`,
+	}
+
+	for name, content := range files {
+		w, err := zw.Create(name)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := io.WriteString(w, content); err != nil {
+			return nil, err
+		}
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }

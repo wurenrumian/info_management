@@ -3,6 +3,7 @@ package profile
 import (
 	"encoding/json"
 	"errors"
+	"regexp"
 	"strings"
 	"time"
 
@@ -199,7 +200,7 @@ func toMeData(user *model.User) (*MeData, error) {
 		College:        user.College,
 		EnrollmentYear: user.EnrollmentYear,
 		Bio:            readString(attrs["bio"]),
-		AvatarURL:      readString(attrs["avatar_url"]),
+		AvatarURL:      normalizeAvatarURL(readString(attrs["avatar_url"])),
 		UpdatedAt:      user.UpdatedAt,
 	}, nil
 }
@@ -210,4 +211,15 @@ func readString(v any) string {
 		return ""
 	}
 	return s
+}
+
+var legacyUploadsPrefixPattern = regexp.MustCompile(`^/uploads/documents/(avatars|images|knowledge|announcements)/`)
+
+func normalizeAvatarURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	// Backward compatibility for legacy paths generated under /uploads/documents/<category>/...
+	return legacyUploadsPrefixPattern.ReplaceAllString(raw, "/uploads/$1/")
 }
