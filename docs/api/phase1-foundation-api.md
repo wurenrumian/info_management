@@ -4,6 +4,11 @@
 
 `/api/v1`
 
+## Common Public Routes
+
+- `GET /healthz`
+- `GET /uploads/<file_path>`（静态文件访问）
+
 ## Authentication
 
 All endpoints (except `/auth/public-register`, `/wechat/login`, `/wechat/bind`, `/wechat/callback`, `/dev/register-or-login`, and `/dev/login-and-send-subscribe-check`) require a JWT token in the `Authorization` header:
@@ -54,6 +59,7 @@ Token payload contains: `sub` (user ID), `role`, `class_id`, `grade`.
 ## File Endpoints
 
 - `POST /api/v1/files/upload`
+- `GET /api/v1/files/search`
 - `GET /api/v1/files`
 - `GET /api/v1/files/:id`
 - `GET /api/v1/files/:id/download`
@@ -62,10 +68,13 @@ Token payload contains: `sub` (user ID), `role`, `class_id`, `grade`.
 ## Knowledge Endpoints
 
 - `GET /api/v1/knowledge/search`
+- `GET /api/v1/knowledge/:id`
 - `GET /api/v1/admin/knowledge`
 - `GET /api/v1/admin/knowledge/:id`
 - `POST /api/v1/admin/knowledge`
-- `POST /api/v1/admin/knowledge/import`
+- `POST /api/v1/admin/knowledge/:id/attachments`
+- `GET /api/v1/admin/knowledge/:id/attachments`
+- `DELETE /api/v1/admin/knowledge/:id/attachments/:file_id`
 - `PATCH /api/v1/admin/knowledge/:id`
 - `DELETE /api/v1/admin/knowledge/:id`
 

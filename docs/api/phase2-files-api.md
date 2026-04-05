@@ -2,6 +2,11 @@
 
 ## 通用文件上传/下载
 
+### 健康检查与静态访问
+
+- `GET /healthz`：健康检查
+- `GET /uploads/<file_path>`：静态附件访问（例如 `/uploads/documents/2026/04/xxx.pdf`）
+
 ### 上传文件
 
 ```

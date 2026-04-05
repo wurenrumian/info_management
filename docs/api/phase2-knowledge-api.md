@@ -285,7 +285,6 @@
 以下管理动作会写入 `admin_logs`：
 
 - `knowledge.create`
-- `knowledge.import`
 - `knowledge.patch`
 - `knowledge.delete`
 - `knowledge.attach`
