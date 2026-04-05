@@ -39,6 +39,22 @@ func WechatAppSecret() string {
 	return strings.TrimSpace(os.Getenv("WECHAT_APP_SECRET"))
 }
 
+func AIBaseURL() string {
+	return strings.TrimSpace(os.Getenv("AI_BASE_URL"))
+}
+
+func AIProvider() string {
+	return getEnv("AI_PROVIDER", "openrouter")
+}
+
+func AIAPIKey() string {
+	return strings.TrimSpace(os.Getenv("AI_API_KEY"))
+}
+
+func AIModel() string {
+	return getEnv("AI_MODEL", "openai/gpt-5.2")
+}
+
 func DocumentUploadDir() string {
 	return getEnv("DOCUMENT_UPLOAD_DIR", defaultUploadDir)
 }

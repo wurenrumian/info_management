@@ -25,3 +25,15 @@ func TestPrimaryUploadDirPrefersDocumentThenDefault(t *testing.T) {
 		t.Fatalf("PrimaryUploadDir() = %q, want default", got)
 	}
 }
+
+func TestAIProviderUsesEnvOrDefault(t *testing.T) {
+	t.Setenv("AI_PROVIDER", "openrouter")
+	if got := AIProvider(); got != "openrouter" {
+		t.Fatalf("AIProvider() = %q, want %q", got, "openrouter")
+	}
+
+	t.Setenv("AI_PROVIDER", "")
+	if got := AIProvider(); got != "openrouter" {
+		t.Fatalf("AIProvider() = %q, want default", got)
+	}
+}

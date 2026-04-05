@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -364,6 +365,87 @@ func TestAdminKnowledgeDeleteAttachment(t *testing.T) {
 	var logs []model.AdminLog
 	require.NoError(t, db.Where("action = ?", "knowledge.detach").Find(&logs).Error)
 	require.Len(t, logs, 1)
+}
+
+func TestAdminKnowledgeQAGeneratePreviewForbiddenForCadre(t *testing.T) {
+	_, r := setupKnowledgeTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/knowledge/qa-generate-preview", bytes.NewBufferString(`{"file_ids":[1],"qa_count_range":{"min":1,"max":2}}`))
+	req.Header.Set("Content-Type", "application/json")
+	token := testutil.GenerateTestToken(300, 2, 0, "")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusForbidden, w.Code)
+	require.Contains(t, w.Body.String(), "forbidden")
+}
+
+func TestAdminKnowledgeQAGeneratePreviewByTeacher(t *testing.T) {
+	db, r := setupKnowledgeTestRouter(t)
+	doc := model.Document{
+		Title:       "k.docx",
+		FilePath:    "knowledge/2026/04/k.docx",
+		FileSize:    100,
+		ContentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		ContentText: "奖学金申请需要成绩单",
+		UploaderID:  100,
+	}
+	require.NoError(t, db.Create(&doc).Error)
+
+	reqBody := `{"file_ids":[` + strconv.Itoa(int(doc.ID)) + `],"qa_count_range":{"min":1,"max":2}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/knowledge/qa-generate-preview", bytes.NewBufferString(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	token := testutil.GenerateTestToken(400, 3, 0, "")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), `"question"`)
+	require.Contains(t, w.Body.String(), `"attachment_file_ids"`)
+	require.Contains(t, w.Body.String(), `"total":`)
+}
+
+func TestAdminKnowledgeBatchAllOrNothing(t *testing.T) {
+	db, r := setupKnowledgeTestRouter(t)
+
+	body := `{"items":[{"question":"Q1","answer":"A1","keywords":["k1"],"attachment_file_ids":[]},{"question":"","answer":"A2","keywords":["k2"],"attachment_file_ids":[]}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/knowledge/batch", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	token := testutil.GenerateTestToken(400, 3, 0, "")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+
+	var count int64
+	require.NoError(t, db.Model(&model.KnowledgeItem{}).Where("question = ?", "Q1").Count(&count).Error)
+	require.Equal(t, int64(0), count)
+}
+
+func TestAdminKnowledgeBatchAllowsMissingKeywords(t *testing.T) {
+	db, r := setupKnowledgeTestRouter(t)
+
+	body := `{"items":[{"question":"Q1","answer":"A1","attachment_file_ids":[]}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/knowledge/batch", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	token := testutil.GenerateTestToken(400, 3, 0, "")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), `"question":"Q1"`)
+
+	var created model.KnowledgeItem
+	require.NoError(t, db.Where("question = ?", "Q1").First(&created).Error)
+	require.Equal(t, "[]", strings.TrimSpace(string(created.Keywords)))
 }
 
 func TestAdminKnowledgeImportEndpointRemoved(t *testing.T) {

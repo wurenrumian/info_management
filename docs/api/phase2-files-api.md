@@ -134,7 +134,7 @@ GET /api/v1/files/:id/download
 DELETE /api/v1/files/:id
 ```
 
-**权限**：管理员（role >= 2）
+**权限**：超级管理员（role = 4）
 
 **响应**：
 ```json

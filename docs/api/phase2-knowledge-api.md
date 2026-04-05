@@ -95,13 +95,18 @@
 - `GET /api/v1/admin/knowledge?query=...&limit=20&offset=0`
 - `GET /api/v1/admin/knowledge/:id`
 - `POST /api/v1/admin/knowledge`
+- `POST /api/v1/admin/knowledge/qa-generate-preview`（AI 生成问答草稿，仅预览不入库）
+- `POST /api/v1/admin/knowledge/batch`（批量提交问答，事务全成功）
 - `POST /api/v1/admin/knowledge/:id/attachments`（批量绑定附件）
 - `GET /api/v1/admin/knowledge/:id/attachments`（查询已绑定附件）
 - `DELETE /api/v1/admin/knowledge/:id/attachments/:file_id`（解绑单个附件）
 - `PATCH /api/v1/admin/knowledge/:id`
 - `DELETE /api/v1/admin/knowledge/:id`
 
-权限：`role >= 2`（删除相关接口要求 `role >= 3`）
+权限：
+- 常规管理接口：`role >= 2`
+- 删除相关接口：`role >= 3`
+- AI 生成与批量提交接口：`role >= 3`
 
 ### GET /api/v1/admin/knowledge
 
@@ -192,6 +197,102 @@
 }
 ```
 
+### POST /api/v1/admin/knowledge/qa-generate-preview
+
+权限：`role >= 3`
+
+请求体：
+
+```json
+{
+  "file_ids": [12, 18],
+  "qa_count_range": {
+    "min": 5,
+    "max": 12
+  }
+}
+```
+
+约束：
+
+- `file_ids` 不能为空
+- `qa_count_range` 必须满足 `1 <= min <= max <= 30`
+
+成功响应（草稿）：
+
+```json
+{
+  "data": [
+    {
+      "question": "奖学金申请需要什么材料？",
+      "answer": "需要成绩单、综测证明、申请表。",
+      "attachment_file_ids": [12]
+    }
+  ],
+  "total": 9
+}
+```
+
+说明：
+
+- 预览阶段 `keywords` 为可选字段，AI 可不返回。
+
+### POST /api/v1/admin/knowledge/batch
+
+权限：`role >= 3`
+
+请求体：
+
+```json
+{
+  "items": [
+    {
+      "question": "奖学金申请需要什么材料？",
+      "answer": "需要成绩单、综测证明、申请表。",
+      "attachment_file_ids": [12]
+    }
+  ]
+}
+```
+
+说明：
+
+- `keywords` 可选；若不传则按空数组 `[]` 入库。
+
+事务语义：
+
+- 任一 item 校验或写入失败，整体回滚
+- 全部成功才提交
+
+成功响应：
+
+```json
+{
+  "data": [
+    {
+      "id": 101,
+      "question": "奖学金申请需要什么材料？",
+      "answer": "需要成绩单、综测证明、申请表。",
+      "keywords": ["奖学金", "申请材料"],
+      "attachments": [
+        {
+          "file_id": 12,
+          "title": "scholarship.docx",
+          "url": "/uploads/knowledge/2026/04/123_scholarship.docx",
+          "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "file_size": 20480
+        }
+      ],
+      "created_by": 1,
+      "updated_by": 1,
+      "created_at": "2026-04-05T00:00:00Z",
+      "updated_at": "2026-04-05T00:00:00Z"
+    }
+  ],
+  "total": 1
+}
+```
+
 ### PATCH /api/v1/admin/knowledge/:id
 
 请求体（部分字段）：
@@ -234,6 +335,9 @@
 - `400 {"error":"file not found"}`
 - `400 {"error":"invalid file_id"}`
 - `400 {"error":"empty patch"}`
+- `400 {"error":"empty items"}`
+- `400 {"error":"invalid qa_count_range"}`
+- `400 {"error":"invalid item"}`
 - `401 {"error":"unauthorized"}`
 - `403 {"error":"forbidden"}`
 - `404 {"error":"knowledge not found"}`
@@ -244,6 +348,8 @@
 - `500 {"error":"bind attachment failed"}`
 - `500 {"error":"list attachment failed"}`
 - `500 {"error":"delete attachment failed"}`
+- `500 {"error":"generate preview failed"}`
+- `500 {"error":"batch create knowledge failed"}`
 
 ### POST /api/v1/admin/knowledge/:id/attachments
 
@@ -316,3 +422,5 @@
 - `knowledge.delete`
 - `knowledge.attach`
 - `knowledge.detach`
+- `knowledge.ai_generate_preview`
+- `knowledge.batch_create`
