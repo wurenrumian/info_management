@@ -17,7 +17,7 @@ func New(db *gorm.DB) *gin.Engine {
 
 	// Unified static file serving
 	uploadDir := config.DocumentUploadDir()
-	r.Static("/uploads/documents", uploadDir)
+	r.Static("/uploads", uploadDir)
 
 	jwtSecret := config.JWTSecret()
 	appID := config.WechatAppID()
@@ -50,9 +50,11 @@ func New(db *gorm.DB) *gin.Engine {
 	api.PATCH("/me", meHandler.PatchMe)
 	api.GET("/profile/home", meHandler.GetProfileHome)
 	api.GET("/knowledge/search", knowledgeHandler.Search)
+	api.GET("/knowledge/:id", knowledgeHandler.GetByID)
 
 	// File APIs
 	api.POST("/files/upload", fileHandler.Upload)
+	api.GET("/files/search", fileHandler.Search)
 	api.GET("/files", fileHandler.List)
 	api.GET("/files/:id", fileHandler.Get)
 	api.GET("/files/:id/download", fileHandler.Download)
@@ -74,7 +76,9 @@ func New(db *gorm.DB) *gin.Engine {
 	admin.GET("/knowledge", adminKnowledgeHandler.ListKnowledge)
 	admin.GET("/knowledge/:id", adminKnowledgeHandler.GetKnowledge)
 	admin.POST("/knowledge", adminKnowledgeHandler.CreateKnowledge)
-	admin.POST("/knowledge/import", adminKnowledgeHandler.ImportKnowledge)
+	admin.POST("/knowledge/:id/attachments", adminKnowledgeHandler.BindAttachments)
+	admin.GET("/knowledge/:id/attachments", adminKnowledgeHandler.ListAttachments)
+	admin.DELETE("/knowledge/:id/attachments/:file_id", adminKnowledgeHandler.DeleteAttachment)
 	admin.PATCH("/knowledge/:id", adminKnowledgeHandler.PatchKnowledge)
 	admin.DELETE("/knowledge/:id", adminKnowledgeHandler.DeleteKnowledge)
 

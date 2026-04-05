@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -16,6 +17,7 @@ import (
 	"manage/internal/repo"
 	"manage/internal/service/audit"
 	"manage/internal/service/authz"
+	ksvc "manage/internal/service/knowledge"
 	"manage/internal/service/upload"
 )
 
@@ -25,6 +27,17 @@ type FileHandler struct {
 	repo        *repo.DocumentRepo
 	auditLogger *audit.Logger
 	uploadDir   string
+}
+
+type fileSearchItem struct {
+	ID          uint   `json:"id"`
+	Title       string `json:"title"`
+	FilePath    string `json:"file_path"`
+	FileSize    int64  `json:"file_size"`
+	ContentType string `json:"content_type"`
+	UploaderID  uint   `json:"uploader_id"`
+	URL         string `json:"url"`
+	Snippet     string `json:"snippet"`
 }
 
 // NewFileHandler creates a file handler.
@@ -55,8 +68,9 @@ func (h *FileHandler) Upload(c *gin.Context) {
 		response.Error(c, 400, "missing file")
 		return
 	}
+	scene := c.PostForm("scene")
 
-	result, err := h.svc.SaveFile(file)
+	result, err := h.svc.SaveFileWithScene(file, scene)
 	if err != nil {
 		response.Error(c, 400, "save file failed")
 		return
@@ -67,6 +81,7 @@ func (h *FileHandler) Upload(c *gin.Context) {
 		FilePath:    result.FilePath,
 		FileSize:    result.FileSize,
 		ContentType: result.ContentType,
+		ContentText: ksvc.ExtractTextFromFile(filepath.Join(h.uploadDir, result.FilePath)),
 		UploaderID:  actor.UserID,
 	}
 	if err := h.repo.Create(&doc); err != nil {
@@ -75,6 +90,46 @@ func (h *FileHandler) Upload(c *gin.Context) {
 	}
 
 	response.OK(c, doc)
+}
+
+// Search handles file search by title/content text.
+func (h *FileHandler) Search(c *gin.Context) {
+	actor, ok := auth.GetActor(c)
+	if !ok {
+		response.Error(c, 401, "unauthorized")
+		return
+	}
+	if !authz.Authorize(actor.Role, authz.ActionFilesList) {
+		response.Error(c, 403, "forbidden")
+		return
+	}
+
+	q := strings.TrimSpace(c.Query("q"))
+	if q == "" {
+		response.Error(c, 400, "missing q")
+		return
+	}
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	docs, total, err := h.repo.SearchWithTotal(q, limit, offset)
+	if err != nil {
+		response.Error(c, 500, "search files failed")
+		return
+	}
+	items := make([]fileSearchItem, 0, len(docs))
+	for _, doc := range docs {
+		items = append(items, fileSearchItem{
+			ID:          doc.ID,
+			Title:       doc.Title,
+			FilePath:    doc.FilePath,
+			FileSize:    doc.FileSize,
+			ContentType: doc.ContentType,
+			UploaderID:  doc.UploaderID,
+			URL:         "/uploads/" + doc.FilePath,
+			Snippet:     buildSnippet(doc.ContentText, q),
+		})
+	}
+	response.List(c, items, total)
 }
 
 // List handles file list with pagination.
@@ -203,4 +258,36 @@ func (h *FileHandler) Delete(c *gin.Context) {
 	h.auditLogger.Log(c, actor, "document.delete", "document", uint(id64))
 
 	response.OK(c, gin.H{"deleted": true})
+}
+
+func buildSnippet(content, query string) string {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return ""
+	}
+	query = strings.TrimSpace(query)
+	if query == "" {
+		if len([]rune(content)) > 120 {
+			return string([]rune(content)[:120])
+		}
+		return content
+	}
+	contentLower := strings.ToLower(content)
+	queryLower := strings.ToLower(query)
+	idx := strings.Index(contentLower, queryLower)
+	if idx < 0 {
+		if len([]rune(content)) > 120 {
+			return string([]rune(content)[:120])
+		}
+		return content
+	}
+	start := idx - 30
+	if start < 0 {
+		start = 0
+	}
+	end := idx + len(query) + 60
+	if end > len(content) {
+		end = len(content)
+	}
+	return strings.TrimSpace(content[start:end])
 }

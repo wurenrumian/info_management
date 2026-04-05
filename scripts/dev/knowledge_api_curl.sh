@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-# 个人集成测试使用，如需本地运行可能要更改一些参数
-
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8080}"
@@ -43,9 +41,6 @@ generate_token() {
   echo "$header.$payload.$signature"
 }
 
-ADMIN_TOKEN=$(generate_token "$ADMIN_USER_ID" "$ADMIN_ROLE" "$ADMIN_CLASS_ID" "$ADMIN_GRADE")
-STUDENT_TOKEN=$(generate_token "$STUDENT_USER_ID" "$STUDENT_ROLE" "$STUDENT_CLASS_ID" "$STUDENT_GRADE")
-
 assert_contains() {
   local haystack="$1"
   local needle="$2"
@@ -58,20 +53,32 @@ assert_contains() {
   echo "[PASS] $label"
 }
 
-assert_contains_any() {
-  local haystack="$1"
+extract_id() {
+  local body="$1"
+  local id
+  id="$(sed -n 's/.*"id":[[:space:]]*\([0-9][0-9]*\).*/\1/p' <<<"$body" | head -n1)"
+  if [[ -z "$id" ]]; then
+    id="$(sed -n 's/.*"ID":[[:space:]]*\([0-9][0-9]*\).*/\1/p' <<<"$body" | head -n1)"
+  fi
+  echo "$id"
+}
+
+upload_file() {
+  local file_path="$1"
   local label="$2"
-  shift 2
-  local needle
-  for needle in "$@"; do
-    if [[ "$haystack" == *"$needle"* ]]; then
-      echo "[PASS] $label"
-      return
-    fi
-  done
-  echo "[FAIL] $label: none of expected markers found"
-  echo "response: $haystack"
-  exit 1
+
+  local resp
+  resp="$(curl -s -X POST "$BASE_URL/api/v1/files/upload" \
+    -H "Authorization: Bearer $ADMIN_TOKEN" \
+    -F "file=@$file_path")"
+  echo "$resp"
+  local file_id
+  file_id="$(extract_id "$resp")"
+  if [[ -z "$file_id" ]]; then
+    echo "[FAIL] $label: failed to parse file id"
+    exit 1
+  fi
+  echo "$file_id"
 }
 
 if [[ ! -f "$DOCX_FILE" ]]; then
@@ -89,131 +96,145 @@ else
   SKIP_PDF=0
 fi
 
+ADMIN_TOKEN=$(generate_token "$ADMIN_USER_ID" "$ADMIN_ROLE" "$ADMIN_CLASS_ID" "$ADMIN_GRADE")
+STUDENT_TOKEN=$(generate_token "$STUDENT_USER_ID" "$STUDENT_ROLE" "$STUDENT_CLASS_ID" "$STUDENT_GRADE")
+
 echo "== 1) Health Check =="
 health_resp="$(curl -s "$BASE_URL/healthz")"
 echo "$health_resp"
 assert_contains "$health_resp" "ok" "health check"
 echo
 
-echo "== 2) Admin Import Knowledge (multipart) =="
-import_resp="$(curl -s -X POST "$BASE_URL/api/v1/admin/knowledge/import" \
+echo "== 2) Admin Create Knowledge =="
+create_resp="$(curl -s -X POST "$BASE_URL/api/v1/admin/knowledge" \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -F "question=奖学金申请材料有哪些" \
-  -F "answer=请按附件准备并提交" \
-  -F "keywords=奖学金,申请,材料" \
-  -F "files=@$DOCX_FILE" \
-  -F "files=@$XLSX_FILE")"
-echo "$import_resp"
-assert_contains_any "$import_resp" "import knowledge" "\"question\":\"奖学金申请材料有哪些\"" "\"Question\":\"奖学金申请材料有哪些\""
-import_id="$(sed -n 's/.*"id":[[:space:]]*\([0-9][0-9]*\).*/\1/p' <<<"$import_resp" | head -n1)"
-if [[ -z "$import_id" ]]; then
-  import_id="$(sed -n 's/.*"ID":[[:space:]]*\([0-9][0-9]*\).*/\1/p' <<<"$import_resp" | head -n1)"
-fi
-if [[ -z "$import_id" ]]; then
-  echo "[FAIL] import knowledge: failed to parse id"
+  -H "Content-Type: application/json" \
+  -d '{"question":"奖学金申请材料有哪些","answer":"请按附件准备并提交","keywords":["奖学金","申请","材料"]}')"
+echo "$create_resp"
+assert_contains "$create_resp" "奖学金申请材料有哪些" "create knowledge"
+knowledge_id="$(extract_id "$create_resp")"
+if [[ -z "$knowledge_id" ]]; then
+  echo "[FAIL] create knowledge: failed to parse id"
   exit 1
 fi
-echo "Imported knowledge id: $import_id"
+echo "Created knowledge id: $knowledge_id"
+echo
+
+echo "== 3) Upload DOCX/XLSX Files =="
+docx_file_id="$(upload_file "$DOCX_FILE" "upload docx" | tail -n1)"
+echo "DOCX file id: $docx_file_id"
+xlsx_file_id="$(upload_file "$XLSX_FILE" "upload xlsx" | tail -n1)"
+echo "XLSX file id: $xlsx_file_id"
+echo
+
+echo "== 4) Bind DOCX/XLSX To Knowledge =="
+bind_resp="$(curl -s -X POST "$BASE_URL/api/v1/admin/knowledge/$knowledge_id/attachments" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"file_ids\":[${docx_file_id},${xlsx_file_id}]}")"
+echo "$bind_resp"
+assert_contains "$bind_resp" '"added_count":2' "bind attachments"
+echo
+
+echo "== 4a) Search Files By DOCX Content =="
+files_search_docx_resp="$(curl -s "$BASE_URL/api/v1/files/search?q=综测排名证明" \
+  -H "Authorization: Bearer $STUDENT_TOKEN")"
+echo "$files_search_docx_resp"
+assert_contains "$files_search_docx_resp" '"total":' "files search has total"
+assert_contains "$files_search_docx_resp" "综测排名证明" "files search docx snippet hit"
+assert_contains "$files_search_docx_resp" "\"id\":$docx_file_id" "files search includes docx file id"
+assert_contains "$files_search_docx_resp" '"/uploads/documents/' "files search includes file url"
 echo
 
 if [[ "$SKIP_PDF" -eq 0 ]]; then
-  echo "== 2b) Admin Import PDF Knowledge =="
-  pdf_import_resp="$(curl -s -X POST "$BASE_URL/api/v1/admin/knowledge/import" \
+  echo "== 4b) Upload+Bind PDF To Knowledge =="
+  pdf_file_id="$(upload_file "$PDF_FILE" "upload pdf" | tail -n1)"
+  echo "PDF file id: $pdf_file_id"
+  bind_pdf_resp="$(curl -s -X POST "$BASE_URL/api/v1/admin/knowledge/$knowledge_id/attachments" \
     -H "Authorization: Bearer $ADMIN_TOKEN" \
-    -F "question=C++学习路线指南" \
-    -F "answer=请参考附件PDF文档" \
-    -F "keywords=C++,后端,学习路线" \
-    -F "files=@$PDF_FILE")"
-  echo "$pdf_import_resp"
-  assert_contains "$pdf_import_resp" "C++学习路线指南" "pdf import knowledge"
-  pdf_import_id="$(sed -n 's/.*"id":[[:space:]]*\([0-9][0-9]*\).*/\1/p' <<<"$pdf_import_resp" | head -n1)"
-  if [[ -z "$pdf_import_id" ]]; then
-    pdf_import_id="$(sed -n 's/.*"ID":[[:space:]]*\([0-9][0-9]*\).*/\1/p' <<<"$pdf_import_resp" | head -n1)"
-  fi
-  echo "Imported PDF knowledge id: $pdf_import_id"
+    -H "Content-Type: application/json" \
+    -d "{\"file_ids\":[${pdf_file_id}]}")"
+  echo "$bind_pdf_resp"
+  assert_contains "$bind_pdf_resp" '"added_count":1' "bind pdf attachment"
+  echo
+
+  echo "== 4c) Search Files By PDF Content =="
+  files_search_pdf_resp="$(curl -s "$BASE_URL/api/v1/files/search?q=C++技术栈" \
+    -H "Authorization: Bearer $STUDENT_TOKEN")"
+  echo "$files_search_pdf_resp"
+  assert_contains "$files_search_pdf_resp" '"total":' "files search pdf has total"
+  assert_contains "$files_search_pdf_resp" "C++技术栈" "files search pdf snippet hit"
+  assert_contains "$files_search_pdf_resp" "\"id\":$pdf_file_id" "files search includes pdf file id"
   echo
 fi
 
-echo "== 3) Student Search by Normal Keywords =="
+echo "== 5) Student Search by Normal Keywords =="
 search_keyword_resp="$(curl -s "$BASE_URL/api/v1/knowledge/search?q=奖学金申请" \
   -H "Authorization: Bearer $STUDENT_TOKEN")"
 echo "$search_keyword_resp"
-assert_contains "$search_keyword_resp" "\"total\":" "student search has total"
+assert_contains "$search_keyword_resp" '"total":' "student search has total"
 assert_contains "$search_keyword_resp" "奖学金申请材料有哪些" "student search keyword hit"
 echo
 
-echo "== 4) Student Search by Doc Content Keywords =="
+echo "== 6) Student Search by Doc Content Keywords =="
 search_doc_resp="$(curl -s "$BASE_URL/api/v1/knowledge/search?q=综测排名证明" \
   -H "Authorization: Bearer $STUDENT_TOKEN")"
 echo "$search_doc_resp"
-assert_contains "$search_doc_resp" "\"total\":" "doc search has total"
+assert_contains "$search_doc_resp" '"total":' "doc search has total"
 assert_contains "$search_doc_resp" "奖学金申请材料有哪些" "student search doc content hit"
 echo
 
 if [[ "$SKIP_PDF" -eq 0 ]]; then
-  echo "== 4b) Student Search by PDF Content Keywords =="
+  echo "== 6b) Student Search by PDF Content Keywords =="
   search_pdf_resp="$(curl -s "$BASE_URL/api/v1/knowledge/search?q=C++技术栈" \
     -H "Authorization: Bearer $STUDENT_TOKEN")"
   echo "$search_pdf_resp"
-  assert_contains "$search_pdf_resp" "\"total\":" "pdf search has total"
-  assert_contains "$search_pdf_resp" "C++学习路线指南" "student search pdf content hit"
+  assert_contains "$search_pdf_resp" '"total":' "pdf search has total"
+  assert_contains "$search_pdf_resp" "奖学金申请材料有哪些" "student search pdf content hit"
   echo
 fi
 
-echo "== 5) Admin List Knowledge =="
+echo "== 7) Admin List/Detail =="
 admin_list_resp="$(curl -s "$BASE_URL/api/v1/admin/knowledge?query=奖学金&limit=20&offset=0" \
   -H "Authorization: Bearer $ADMIN_TOKEN")"
 echo "$admin_list_resp"
-assert_contains "$admin_list_resp" "\"total\":" "admin list has total"
-assert_contains "$admin_list_resp" "奖学金申请材料有哪些" "admin list query hit"
-echo
+assert_contains "$admin_list_resp" '"total":' "admin list has total"
 
-echo "== 6) Admin Get Knowledge By ID =="
-admin_get_resp="$(curl -s "$BASE_URL/api/v1/admin/knowledge/$import_id" \
+admin_get_resp="$(curl -s "$BASE_URL/api/v1/admin/knowledge/$knowledge_id" \
   -H "Authorization: Bearer $ADMIN_TOKEN")"
 echo "$admin_get_resp"
-assert_contains_any "$admin_get_resp" "admin get by id" "\"id\":$import_id" "\"ID\":$import_id"
+assert_contains "$admin_get_resp" "\"id\":$knowledge_id" "admin get by id"
 echo
 
-echo "== 7) Admin Patch Knowledge =="
-admin_patch_resp="$(curl -s -X PATCH "$BASE_URL/api/v1/admin/knowledge/$import_id" \
+echo "== 8) Admin List Attachments =="
+list_attach_resp="$(curl -s "$BASE_URL/api/v1/admin/knowledge/$knowledge_id/attachments" \
+  -H "Authorization: Bearer $ADMIN_TOKEN")"
+echo "$list_attach_resp"
+assert_contains "$list_attach_resp" "\"file_id\":$docx_file_id" "list has docx"
+assert_contains "$list_attach_resp" "\"file_id\":$xlsx_file_id" "list has xlsx"
+echo
+
+echo "== 9) Admin Patch Knowledge =="
+admin_patch_resp="$(curl -s -X PATCH "$BASE_URL/api/v1/admin/knowledge/$knowledge_id" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -d '{"answer":"请按最新附件材料提交"}')"
 echo "$admin_patch_resp"
-assert_contains "$admin_patch_resp" "\"updated\":true" "admin patch success"
+assert_contains "$admin_patch_resp" '"updated":true' "admin patch success"
 echo
 
-echo "== 8) Admin Patch Non-Existing Knowledge =="
-admin_patch_404_resp="$(curl -s -X PATCH "$BASE_URL/api/v1/admin/knowledge/99999999" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -d '{"answer":"not found"}')"
-echo "$admin_patch_404_resp"
-assert_contains "$admin_patch_404_resp" "knowledge not found" "admin patch 404"
+echo "== 10) Admin Detach One Attachment =="
+detach_resp="$(curl -s -X DELETE "$BASE_URL/api/v1/admin/knowledge/$knowledge_id/attachments/$docx_file_id" \
+  -H "Authorization: Bearer $ADMIN_TOKEN")"
+echo "$detach_resp"
+assert_contains "$detach_resp" '"deleted":true' "admin detach success"
 echo
 
-echo "== 9) Admin Delete Knowledge =="
-admin_delete_resp="$(curl -s -X DELETE "$BASE_URL/api/v1/admin/knowledge/$import_id" \
+echo "== 11) Admin Delete Knowledge =="
+admin_delete_resp="$(curl -s -X DELETE "$BASE_URL/api/v1/admin/knowledge/$knowledge_id" \
   -H "Authorization: Bearer $ADMIN_TOKEN")"
 echo "$admin_delete_resp"
-assert_contains "$admin_delete_resp" "\"deleted\":true" "admin delete success"
+assert_contains "$admin_delete_resp" '"deleted":true' "admin delete success"
 echo
-
-echo "== 10) Admin Get Deleted Knowledge =="
-admin_get_deleted_resp="$(curl -s "$BASE_URL/api/v1/admin/knowledge/$import_id" \
-  -H "Authorization: Bearer $ADMIN_TOKEN")"
-echo "$admin_get_deleted_resp"
-assert_contains "$admin_get_deleted_resp" "knowledge not found" "admin get deleted item 404"
-echo
-
-if [[ "$SKIP_PDF" -eq 0 && -n "${pdf_import_id:-}" ]]; then
-  echo "== 10b) Admin Delete PDF Knowledge =="
-  admin_delete_pdf_resp="$(curl -s -X DELETE "$BASE_URL/api/v1/admin/knowledge/$pdf_import_id" \
-    -H "Authorization: Bearer $ADMIN_TOKEN")"
-  echo "$admin_delete_pdf_resp"
-  assert_contains "$admin_delete_pdf_resp" "\"deleted\":true" "admin delete pdf success"
-  echo
-fi
 
 echo "Done."

@@ -40,11 +40,11 @@ services:
       - .env
     environment:
       PORT: "8080"
-      DOCUMENT_UPLOAD_DIR: /data/uploads/documents
+      DOCUMENT_UPLOAD_DIR: /data/uploads
       # 默认使用团队开发约定账号密码；可在 .env 覆盖
       DATABASE_DSN: ${DATABASE_DSN:-host=kingbase port=54321 user=system password=123456 dbname=kingbase sslmode=disable}
     volumes:
-      - ./data/uploads/documents:/data/uploads/documents
+      - ./data/uploads:/data/uploads
       - ./license_71193_0.dat:/certs/kingbase.dat:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1"]

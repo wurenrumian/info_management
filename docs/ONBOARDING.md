@@ -75,8 +75,8 @@ KINGBASE_PORT_BIND=54321:54321
 # 服务端口
 PORT=8080
 
-# 统一文件上传目录
-DOCUMENT_UPLOAD_DIR=/data/uploads/documents
+# 统一文件上传根目录
+DOCUMENT_UPLOAD_DIR=/data/uploads
 
 # 开发模式（启用 dev 辅助接口）
 APP_ENV=dev

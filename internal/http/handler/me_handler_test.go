@@ -87,6 +87,27 @@ func TestGetMeReturnsProfileFields(t *testing.T) {
 	require.Contains(t, resp.Data, "enrollment_year")
 }
 
+func TestGetMeNormalizesLegacyAvatarURLPrefix(t *testing.T) {
+	db, r := setupMeTestRouter(t)
+	require.NoError(t, db.Model(&model.User{}).Where("id = ?", 100).Update(
+		"profile_attrs",
+		datatypes.JSON([]byte(`{"avatar_url":"/uploads/documents/avatars/2026/04/a.jpg"}`)),
+	).Error)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+	token := testutil.GenerateTestToken(100, model.RoleStudent, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var resp struct {
+		Data map[string]any `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Equal(t, "/uploads/avatars/2026/04/a.jpg", resp.Data["avatar_url"])
+}
+
 func TestGetMeReturnsTeacherSelfInsteadOfFirstScopedUser(t *testing.T) {
 	db, r := setupMeTestRouter(t)
 
@@ -266,6 +287,20 @@ func TestPatchMeUpdatesColumnsAndProfileAttrs(t *testing.T) {
 	require.Equal(t, "new-bio", attrs["bio"])
 	require.Equal(t, "new-nickname", attrs["nickname"])
 	require.Equal(t, "blue", attrs["theme"])
+}
+
+func TestPatchMeAcceptsUploadsRelativeAvatarURL(t *testing.T) {
+	_, r := setupMeTestRouter(t)
+
+	body := []byte(`{"avatar_url":"/uploads/avatars/2026/04/new.jpg"}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/me", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(100, model.RoleStudent, 1, "2023"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), "/uploads/avatars/2026/04/new.jpg")
 }
 
 func TestPatchMeRejectsReadOnlyFields(t *testing.T) {

@@ -21,7 +21,7 @@ func TestPrimaryUploadDirPrefersDocumentThenDefault(t *testing.T) {
 	}
 
 	t.Setenv("DOCUMENT_UPLOAD_DIR", "")
-	if got := PrimaryUploadDir(); got != "./data/uploads/documents" {
+	if got := PrimaryUploadDir(); got != "./data/uploads" {
 		t.Fatalf("PrimaryUploadDir() = %q, want default", got)
 	}
 }

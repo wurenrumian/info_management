@@ -2,6 +2,11 @@
 
 ## 通用文件上传/下载
 
+### 健康检查与静态访问
+
+- `GET /healthz`：健康检查
+- `GET /uploads/<file_path>`：静态附件访问（例如 `/uploads/documents/2026/04/xxx.pdf`）
+
 ### 上传文件
 
 ```
@@ -9,6 +14,7 @@ POST /api/v1/files/upload
 Content-Type: multipart/form-data
 
 file: <binary>
+scene: <optional, avatar|knowledge|announcement|document>
 ```
 
 **权限**：所有登录用户（role >= 1）
@@ -32,6 +38,10 @@ file: <binary>
 - 400: `missing file` / `file too large` / `unsupported file type`
 - 401: 未认证
 - 403: 无权限
+
+说明：
+- `scene` 为可选字段，后端可据此进行分目录存储（例如 `avatars/`、`knowledge/`）。
+- 若不传 `scene`，后端会按文件类型自动分流（图片优先进入 `images/`，其余进入 `documents/`）。
 
 ### 文件列表
 
@@ -58,6 +68,42 @@ GET /api/v1/files?limit=20&offset=0
   "total": 42
 }
 ```
+
+### 文件检索（按标题 + 文档正文）
+
+```
+GET /api/v1/files/search?q=...&limit=20&offset=0
+```
+
+**权限**：所有登录用户
+
+搜索范围：
+- `title`
+- `content_text`（上传时抽取的文档正文，支持分词检索）
+
+**响应**：
+```json
+{
+  "data": [
+    {
+      "id": 2,
+      "title": "scholarship.docx",
+      "file_path": "documents/2026/04/123_scholarship.docx",
+      "file_size": 20480,
+      "content_type": "application/msword",
+      "uploader_id": 5,
+      "url": "/uploads/documents/2026/04/123_scholarship.docx",
+      "snippet": "奖学金申请需要提交综测排名证明和成绩单"
+    }
+  ],
+  "total": 1
+}
+```
+
+**错误**：
+- 400: `missing q`
+- 401: 未认证
+- 403: 无权限
 
 ### 获取文件元数据
 
@@ -111,7 +157,7 @@ DELETE /api/v1/files/:id
 
 ## 存储路径
 
-文件存储于 `data/uploads/documents/<YYYY>/<MM>/<unique_filename>`，按年月分目录。
+文件存储于 `data/uploads/<category>/<YYYY>/<MM>/<unique_filename>`，按业务分类与年月分目录。
 
 ## 其他模块使用方式
 
