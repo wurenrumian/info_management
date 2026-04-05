@@ -20,10 +20,13 @@ func TestAuthorizeMatrix(t *testing.T) {
 		{model.RoleStudent, authz.ActionUsersList, false},
 		{model.RoleCadre, authz.ActionUsersList, true},
 		{model.RoleCadre, authz.ActionKnowledgeCreate, true},
+		{model.RoleCadre, authz.ActionFilesDelete, false},
 		{model.RoleCadre, authz.ActionUsersPatch, false},
 		{model.RoleTeacher, authz.ActionClassesGet, true},
 		{model.RoleTeacher, authz.ActionKnowledgePatch, true},
+		{model.RoleTeacher, authz.ActionFilesDelete, false},
 		{model.RoleTeacher, authz.ActionClassesCreate, false},
+		{model.RoleSuperAdmin, authz.ActionFilesDelete, true},
 		{model.RoleSuperAdmin, authz.ActionAdminLogsList, true},
 		{999, authz.ActionGetMe, false},
 	}

@@ -25,13 +25,11 @@ func Authorize(role int, action string) bool {
 			action == ActionKnowledgeGet ||
 			action == ActionKnowledgeCreate ||
 			action == ActionKnowledgePatch ||
-			action == ActionKnowledgeDelete ||
 			action == ActionClassesList ||
 			action == ActionClassesGet ||
 			action == ActionFilesUpload ||
 			action == ActionFilesGet ||
-			action == ActionFilesList ||
-			action == ActionFilesDelete
+			action == ActionFilesList
 	case model.RoleTeacher:
 		return action == ActionUsersList ||
 			action == ActionUsersGet ||
@@ -49,8 +47,7 @@ func Authorize(role int, action string) bool {
 			action == ActionClassesGet ||
 			action == ActionFilesUpload ||
 			action == ActionFilesGet ||
-			action == ActionFilesList ||
-			action == ActionFilesDelete
+			action == ActionFilesList
 	case model.RoleSuperAdmin:
 		return true
 	default:

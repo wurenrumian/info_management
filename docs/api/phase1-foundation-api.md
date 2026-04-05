@@ -7,7 +7,7 @@
 ## Common Public Routes
 
 - `GET /healthz`
-- `GET /uploads/<file_path>`（静态文件访问）
+- `GET /uploads/<file_path>`（静态文件访问，例如 `/uploads/knowledge/...`、`/uploads/avatars/...`）
 
 ## Authentication
 
@@ -106,7 +106,7 @@ Request:
   "college": "信息学院",
   "enrollment_year": 2023,
   "bio": "今天也在认真生活",
-  "avatar_url": "https://example.com/avatar/10001.png"
+  "avatar_url": "/uploads/avatars/2026/04/1775373038139423368_avatar.jpg"
 }
 ```
 
@@ -124,7 +124,7 @@ Response:
     "college": "信息学院",
     "enrollment_year": 2023,
     "bio": "今天也在认真生活",
-    "avatar_url": "https://example.com/avatar/10001.png",
+    "avatar_url": "/uploads/avatars/2026/04/1775373038139423368_avatar.jpg",
     "updated_at": "2026-04-03T10:20:30Z"
   }
 }

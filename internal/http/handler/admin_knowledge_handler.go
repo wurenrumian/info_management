@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -23,10 +24,12 @@ import (
 
 // AdminKnowledgeHandler handles knowledge management APIs.
 type AdminKnowledgeHandler struct {
+	db             *gorm.DB
 	svc            *ksvc.Service
 	auditLogger    *audit.Logger
 	documentRepo   *repo.DocumentRepo
 	attachmentRepo *repo.KnowledgeAttachmentRepo
+	qaGenerator    ksvc.QAGenerator
 	uploadDir      string
 }
 
@@ -34,10 +37,12 @@ type AdminKnowledgeHandler struct {
 func NewAdminKnowledgeHandler(db *gorm.DB) *AdminKnowledgeHandler {
 	uploadDir := config.PrimaryUploadDir()
 	return &AdminKnowledgeHandler{
+		db:             db,
 		svc:            ksvc.NewService(db),
 		auditLogger:    audit.NewLogger(repo.NewAdminLogRepo(db)),
 		documentRepo:   repo.NewDocumentRepo(db),
 		attachmentRepo: repo.NewKnowledgeAttachmentRepo(db),
+		qaGenerator:    ksvc.NewQAGeneratorFromConfig(),
 		uploadDir:      uploadDir,
 	}
 }
@@ -58,6 +63,15 @@ type patchKnowledgeReq struct {
 
 type bindAttachmentsReq struct {
 	FileIDs []uint `json:"file_ids"`
+}
+
+type qaGeneratePreviewReq struct {
+	FileIDs      []uint            `json:"file_ids"`
+	QACountRange ksvc.QACountRange `json:"qa_count_range"`
+}
+
+type batchCreateKnowledgeReq struct {
+	Items []ksvc.QADraft `json:"items"`
 }
 
 type attachmentResp struct {
@@ -447,6 +461,213 @@ func (h *AdminKnowledgeHandler) DeleteKnowledge(c *gin.Context) {
 
 	h.auditLogger.Log(c, actor, "knowledge.delete", "knowledge", uint(id64))
 	response.OK(c, gin.H{"deleted": true})
+}
+
+// GenerateQAPreview generates editable QA drafts from uploaded documents.
+func (h *AdminKnowledgeHandler) GenerateQAPreview(c *gin.Context) {
+	actor, ok := auth.GetActor(c)
+	if !ok {
+		response.Error(c, 401, "unauthorized")
+		return
+	}
+	if actor.Role < model.RoleTeacher {
+		response.Error(c, 403, "forbidden")
+		return
+	}
+
+	var req qaGeneratePreviewReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, 400, "invalid body")
+		return
+	}
+	fileIDs := dedupeUint(req.FileIDs)
+	if len(fileIDs) == 0 {
+		response.Error(c, 400, "missing file_ids")
+		return
+	}
+	if err := ksvc.ValidateCountRange(req.QACountRange); err != nil {
+		response.Error(c, 400, "invalid qa_count_range")
+		return
+	}
+	log.Printf("[knowledge-ai] preview request user_id=%d role=%d files=%d range=%d-%d", actor.UserID, actor.Role, len(fileIDs), req.QACountRange.Min, req.QACountRange.Max)
+
+	docs, err := h.documentRepo.ListByIDs(fileIDs)
+	if err != nil {
+		response.Error(c, 500, "generate preview failed")
+		return
+	}
+	if len(docs) != len(fileIDs) {
+		response.Error(c, 400, "file not found")
+		return
+	}
+
+	docByID := make(map[uint]model.Document, len(docs))
+	for _, d := range docs {
+		docByID[d.ID] = d
+	}
+	inputs := make([]ksvc.QADocumentInput, 0, len(fileIDs))
+	for _, fileID := range fileIDs {
+		doc, ok := docByID[fileID]
+		if !ok {
+			response.Error(c, 400, "file not found")
+			return
+		}
+		inputs = append(inputs, ksvc.QADocumentInput{
+			FileID:      doc.ID,
+			Title:       doc.Title,
+			FilePath:    doc.FilePath,
+			URL:         "/uploads/" + doc.FilePath,
+			ContentText: doc.ContentText,
+		})
+	}
+
+	drafts, err := h.qaGenerator.Generate(c.Request.Context(), inputs, req.QACountRange)
+	if err != nil {
+		log.Printf("[knowledge-ai] preview failed user_id=%d err=%v", actor.UserID, err)
+		response.Error(c, 500, "generate preview failed")
+		return
+	}
+	log.Printf("[knowledge-ai] preview success user_id=%d items=%d", actor.UserID, len(drafts))
+
+	h.auditLogger.Log(c, actor, "knowledge.ai_generate_preview", "knowledge", 0)
+	response.List(c, drafts, int64(len(drafts)))
+}
+
+// BatchCreateKnowledge creates multiple knowledge items in one transaction.
+func (h *AdminKnowledgeHandler) BatchCreateKnowledge(c *gin.Context) {
+	actor, ok := auth.GetActor(c)
+	if !ok {
+		response.Error(c, 401, "unauthorized")
+		return
+	}
+	if actor.Role < model.RoleTeacher {
+		response.Error(c, 403, "forbidden")
+		return
+	}
+
+	var req batchCreateKnowledgeReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, 400, "invalid body")
+		return
+	}
+	if len(req.Items) == 0 {
+		response.Error(c, 400, "empty items")
+		return
+	}
+
+	allFileIDs := make([]uint, 0, len(req.Items))
+	for _, item := range req.Items {
+		allFileIDs = append(allFileIDs, item.AttachmentFileIDs...)
+	}
+	allFileIDs = dedupeUint(allFileIDs)
+	docByID := map[uint]model.Document{}
+	if len(allFileIDs) > 0 {
+		docs, err := h.documentRepo.ListByIDs(allFileIDs)
+		if err != nil {
+			response.Error(c, 500, "batch create knowledge failed")
+			return
+		}
+		if len(docs) != len(allFileIDs) {
+			response.Error(c, 400, "file not found")
+			return
+		}
+		for _, d := range docs {
+			docByID[d.ID] = d
+		}
+	}
+
+	createdItems := make([]model.KnowledgeItem, 0, len(req.Items))
+	err := h.db.Transaction(func(tx *gorm.DB) error {
+		for _, item := range req.Items {
+			question := strings.TrimSpace(item.Question)
+			answer := strings.TrimSpace(item.Answer)
+			if question == "" || answer == "" {
+				return ksvc.ErrInvalidDraftItem
+			}
+
+			keywordsIn := item.Keywords
+			if keywordsIn == nil {
+				keywordsIn = []string{}
+			}
+			keywords, err := json.Marshal(keywordsIn)
+			if err != nil {
+				return ksvc.ErrInvalidDraftItem
+			}
+			emptyAttachments, _ := json.Marshal([]attachmentResp{})
+
+			record := model.KnowledgeItem{
+				Question:    question,
+				Answer:      answer,
+				Keywords:    datatypes.JSON(keywords),
+				Attachments: datatypes.JSON(emptyAttachments),
+				CreatedBy:   actor.UserID,
+				UpdatedBy:   actor.UserID,
+			}
+			if err := tx.Create(&record).Error; err != nil {
+				return err
+			}
+
+			attachmentIDs := dedupeUint(item.AttachmentFileIDs)
+			if len(attachmentIDs) > 0 {
+				rels := make([]model.KnowledgeAttachment, 0, len(attachmentIDs))
+				attachmentDocs := make([]model.Document, 0, len(attachmentIDs))
+				for _, fileID := range attachmentIDs {
+					doc, ok := docByID[fileID]
+					if !ok {
+						return ksvc.ErrInvalidDraftItem
+					}
+					rels = append(rels, model.KnowledgeAttachment{
+						KnowledgeID: record.ID,
+						FileID:      fileID,
+						CreatedBy:   actor.UserID,
+					})
+					attachmentDocs = append(attachmentDocs, doc)
+				}
+				if err := tx.Create(&rels).Error; err != nil {
+					return err
+				}
+
+				additional := extractTextFromDocuments(h.uploadDir, attachmentDocs)
+				merged := mergeContentText(record.ContentText, additional)
+				if merged != record.ContentText {
+					if err := tx.Model(&model.KnowledgeItem{}).Where("id = ?", record.ID).Updates(map[string]any{
+						"content_text": merged,
+						"updated_by":   actor.UserID,
+					}).Error; err != nil {
+						return err
+					}
+					record.ContentText = merged
+				}
+
+				attachments := make([]attachmentResp, 0, len(attachmentDocs))
+				for _, doc := range attachmentDocs {
+					attachments = append(attachments, toAttachmentResp(doc))
+				}
+				b, err := json.Marshal(attachments)
+				if err != nil {
+					return err
+				}
+				if err := tx.Model(&model.KnowledgeItem{}).Where("id = ?", record.ID).Update("attachments", datatypes.JSON(b)).Error; err != nil {
+					return err
+				}
+				record.Attachments = datatypes.JSON(b)
+			}
+
+			createdItems = append(createdItems, record)
+		}
+		return nil
+	})
+	if err != nil {
+		if errors.Is(err, ksvc.ErrInvalidDraftItem) {
+			response.Error(c, 400, "invalid item")
+			return
+		}
+		response.Error(c, 500, "batch create knowledge failed")
+		return
+	}
+
+	h.auditLogger.Log(c, actor, "knowledge.batch_create", "knowledge", 0)
+	response.List(c, createdItems, int64(len(createdItems)))
 }
 
 func (h *AdminKnowledgeHandler) listAttachmentDetailsByKnowledgeID(knowledgeID uint) ([]attachmentResp, error) {

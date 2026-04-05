@@ -5,7 +5,7 @@
 ### 健康检查与静态访问
 
 - `GET /healthz`：健康检查
-- `GET /uploads/<file_path>`：静态附件访问（例如 `/uploads/documents/2026/04/xxx.pdf`）
+- `GET /uploads/<file_path>`：静态附件访问（例如 `/uploads/knowledge/2026/04/xxx.pdf`）
 
 ### 上传文件
 
@@ -25,7 +25,7 @@ scene: <optional, avatar|knowledge|announcement|document>
   "data": {
     "id": 1,
     "title": "report.pdf",
-    "file_path": "2026/04/1712000000000000000_report.pdf",
+    "file_path": "knowledge/2026/04/1712000000000000000_report.pdf",
     "file_size": 1048576,
     "content_type": "application/pdf",
     "uploader_id": 5,
@@ -58,7 +58,7 @@ GET /api/v1/files?limit=20&offset=0
     {
       "id": 2,
       "title": "report.pdf",
-      "file_path": "2026/04/123_report.pdf",
+      "file_path": "knowledge/2026/04/123_report.pdf",
       "file_size": 1048576,
       "content_type": "application/pdf",
       "uploader_id": 5,
@@ -88,11 +88,11 @@ GET /api/v1/files/search?q=...&limit=20&offset=0
     {
       "id": 2,
       "title": "scholarship.docx",
-      "file_path": "documents/2026/04/123_scholarship.docx",
+      "file_path": "knowledge/2026/04/123_scholarship.docx",
       "file_size": 20480,
       "content_type": "application/msword",
       "uploader_id": 5,
-      "url": "/uploads/documents/2026/04/123_scholarship.docx",
+      "url": "/uploads/knowledge/2026/04/123_scholarship.docx",
       "snippet": "奖学金申请需要提交综测排名证明和成绩单"
     }
   ],
@@ -134,7 +134,7 @@ GET /api/v1/files/:id/download
 DELETE /api/v1/files/:id
 ```
 
-**权限**：管理员（role >= 2）
+**权限**：超级管理员（role = 4）
 
 **响应**：
 ```json

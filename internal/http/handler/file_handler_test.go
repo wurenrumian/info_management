@@ -98,7 +98,19 @@ func TestFileDeleteForbiddenForStudent(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, w.Code)
 }
 
-func TestFileDeleteByAdmin(t *testing.T) {
+func TestFileDeleteForbiddenForTeacher(t *testing.T) {
+	_, r := setupFileTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/files/1", nil)
+	token := testutil.GenerateTestToken(100, 3, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func TestFileDeleteBySuperAdmin(t *testing.T) {
 	db, r := setupFileTestRouter(t)
 
 	doc := model.Document{
@@ -111,7 +123,7 @@ func TestFileDeleteByAdmin(t *testing.T) {
 	require.NoError(t, db.Create(&doc).Error)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/files/"+strconv.Itoa(int(doc.ID)), nil)
-	token := testutil.GenerateTestToken(200, 2, 0, "")
+	token := testutil.GenerateTestToken(200, 4, 0, "")
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
