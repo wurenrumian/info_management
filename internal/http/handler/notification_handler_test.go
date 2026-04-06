@@ -52,7 +52,6 @@ func TestCreateTemplate(t *testing.T) {
 		"code":               "test_tpl",
 		"wechat_template_id": "tmpl_abc",
 		"name":               "测试模板",
-		"fields":             `{"thing1":"事项"}`,
 	}
 	data, _ := json.Marshal(body)
 
@@ -95,7 +94,6 @@ func TestGetTemplate(t *testing.T) {
 		Code:             "test_tpl",
 		WechatTemplateID: "tmpl_abc",
 		Name:             "测试模板",
-		Fields:           `{"thing1":"事项"}`,
 	}
 	require.NoError(t, repo.CreateTemplate(tmpl))
 
@@ -112,6 +110,8 @@ func TestGetTemplate(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	data := resp["data"].(map[string]any)
 	require.Equal(t, "test_tpl", data["code"])
+	_, hasFields := data["fields"]
+	require.False(t, hasFields)
 }
 
 func TestGetTemplateNotFound(t *testing.T) {

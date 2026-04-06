@@ -8,7 +8,6 @@ type NotificationTemplate struct {
 	Code             string    `gorm:"type:varchar(64);uniqueIndex;not null" json:"code"`
 	WechatTemplateID string    `gorm:"type:varchar(100);not null" json:"wechat_template_id"`
 	Name             string    `gorm:"type:varchar(100);not null" json:"name"`
-	Fields           string    `gorm:"type:jsonb" json:"fields"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }

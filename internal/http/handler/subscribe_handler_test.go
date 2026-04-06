@@ -31,7 +31,14 @@ func setupSubscribeTest(t *testing.T) (*SubscribeHandler, *gin.Engine) {
 }
 
 func TestReportSubscribeAccept(t *testing.T) {
-	_, r := setupSubscribeTest(t)
+	db := testutil.NewTestDB(t)
+	h := NewSubscribeHandler(db)
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("actor", auth.Actor{UserID: 1, Role: 1})
+		c.Next()
+	})
+	r.POST("/user/subscribe/report", h.ReportSubscribe)
 
 	body, _ := json.Marshal(map[string]string{
 		"template_code":      "deadline_remind",
@@ -45,10 +52,38 @@ func TestReportSubscribeAccept(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
+	var resp struct {
+		Data struct {
+			OK             bool   `json:"ok"`
+			Status         string `json:"status"`
+			GrantedCount   int    `json:"granted_count"`
+			ConsumedCount  int    `json:"consumed_count"`
+			RemainingCount int    `json:"remaining_count"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.True(t, resp.Data.OK)
+	require.Equal(t, "subscribed", resp.Data.Status)
+	require.Equal(t, 1, resp.Data.GrantedCount)
+	require.Equal(t, 0, resp.Data.ConsumedCount)
+	require.Equal(t, 1, resp.Data.RemainingCount)
+
+	var sub model.UserSubscribe
+	require.NoError(t, db.Where("user_id = ? AND template_code = ?", 1, "deadline_remind").First(&sub).Error)
+	require.Equal(t, "subscribed", sub.Status)
+	require.Equal(t, 1, sub.GrantedCount)
+	require.Equal(t, 0, sub.ConsumedCount)
 }
 
 func TestReportSubscribeReject(t *testing.T) {
-	_, r := setupSubscribeTest(t)
+	db := testutil.NewTestDB(t)
+	h := NewSubscribeHandler(db)
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("actor", auth.Actor{UserID: 1, Role: 1})
+		c.Next()
+	})
+	r.POST("/user/subscribe/report", h.ReportSubscribe)
 
 	body, _ := json.Marshal(map[string]string{
 		"template_code":      "deadline_remind",
@@ -62,6 +97,27 @@ func TestReportSubscribeReject(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
+	var resp struct {
+		Data struct {
+			OK             bool   `json:"ok"`
+			Status         string `json:"status"`
+			GrantedCount   int    `json:"granted_count"`
+			ConsumedCount  int    `json:"consumed_count"`
+			RemainingCount int    `json:"remaining_count"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.True(t, resp.Data.OK)
+	require.Equal(t, "unsubscribed", resp.Data.Status)
+	require.Equal(t, 0, resp.Data.GrantedCount)
+	require.Equal(t, 0, resp.Data.ConsumedCount)
+	require.Equal(t, 0, resp.Data.RemainingCount)
+
+	var sub model.UserSubscribe
+	require.NoError(t, db.Where("user_id = ? AND template_code = ?", 1, "deadline_remind").First(&sub).Error)
+	require.Equal(t, "unsubscribed", sub.Status)
+	require.Equal(t, 0, sub.GrantedCount)
+	require.Equal(t, 0, sub.ConsumedCount)
 }
 
 func TestReportSubscribeInvalidStatus(t *testing.T) {
@@ -152,6 +208,37 @@ func TestReportSubscribeIdempotent(t *testing.T) {
 	var count int64
 	db.Model(&model.UserSubscribe{}).Where("user_id = ? AND template_code = ?", 1, "test_tpl").Count(&count)
 	require.Equal(t, int64(1), count)
+
+	var sub model.UserSubscribe
+	require.NoError(t, db.Where("user_id = ? AND template_code = ?", 1, "test_tpl").First(&sub).Error)
+	require.Equal(t, 1, sub.GrantedCount)
+	require.Equal(t, 0, sub.ConsumedCount)
+}
+
+func TestReportSubscribeAcceptTwiceAccumulatesGrantedCount(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	h := NewSubscribeHandler(db)
+	actor := auth.Actor{UserID: 1, Role: 1}
+
+	for i := 0; i < 2; i++ {
+		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+		ctx.Set("actor", actor)
+		ctx.Request = httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(
+			mustJSON(map[string]string{
+				"template_code":      "test_tpl",
+				"wechat_template_id": "tmpl_1",
+				"status":             "accept",
+			}),
+		))
+		ctx.Request.Header.Set("Content-Type", "application/json")
+		h.ReportSubscribe(ctx)
+	}
+
+	var sub model.UserSubscribe
+	require.NoError(t, db.Where("user_id = ? AND template_code = ?", 1, "test_tpl").First(&sub).Error)
+	require.Equal(t, "subscribed", sub.Status)
+	require.Equal(t, 2, sub.GrantedCount)
+	require.Equal(t, 0, sub.ConsumedCount)
 }
 
 func TestWechatCallbackPopupEvent(t *testing.T) {

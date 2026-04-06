@@ -248,6 +248,9 @@
     },
     "template_code": "dev_login_check",
     "subscription_status": "subscribed",
+    "granted_count": 1,
+    "consumed_count": 0,
+    "remaining_count": 1,
     "send_ok": true,
     "send_error": ""
   }
@@ -266,3 +269,4 @@
 | 500 | `{"error":"create dev notification template failed"}` | 模板自动创建失败 |
 
 若 `status` 为 `reject`，接口只更新订阅状态为 `unsubscribed`，并返回 `send_ok: false` 以及 `send_error: "subscription status is reject"`，不会尝试发送模板消息。
+若 `status` 为 `accept`，接口会将对应模板的订阅可用次数累加 1；只有实际发送订阅消息成功后，后端才会消耗 1 次。

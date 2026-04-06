@@ -18,7 +18,6 @@ func TestGetTemplateByCode(t *testing.T) {
 		Code:             "test_remind",
 		WechatTemplateID: "tmpl_123",
 		Name:             "测试提醒",
-		Fields:           `{"thing1":"事项"}`,
 	}
 	require.NoError(t, repo.CreateTemplate(tmpl))
 
@@ -110,6 +109,7 @@ func TestIsUserSubscribed(t *testing.T) {
 		TemplateCode:     "deadline_remind",
 		WechatTemplateID: "tmpl_abc",
 		Status:           "subscribed",
+		GrantedCount:     1,
 	}).Error)
 
 	ok, err := repo.IsUserSubscribed(1, "deadline_remind")
@@ -119,6 +119,24 @@ func TestIsUserSubscribed(t *testing.T) {
 	no, err := repo.IsUserSubscribed(1, "other_tpl")
 	require.NoError(t, err)
 	require.False(t, no)
+}
+
+func TestIsUserSubscribedReturnsFalseWhenCountExhausted(t *testing.T) {
+	db := testutil.NewTestDB(t)
+	repo := NewRepo(db)
+
+	require.NoError(t, db.Create(&model.UserSubscribe{
+		UserID:           1,
+		TemplateCode:     "deadline_remind",
+		WechatTemplateID: "tmpl_abc",
+		Status:           "subscribed",
+		GrantedCount:     1,
+		ConsumedCount:    1,
+	}).Error)
+
+	ok, err := repo.IsUserSubscribed(1, "deadline_remind")
+	require.NoError(t, err)
+	require.False(t, ok)
 }
 
 func ptrUint(v uint) *uint {

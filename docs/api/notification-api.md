@@ -28,7 +28,6 @@ POST /api/v1/admin/notification/templates
 | `code` | string | 是 | 模板唯一标识，如 `deadline_remind` |
 | `wechat_template_id` | string | 是 | 微信后台配置的模板 ID |
 | `name` | string | 是 | 模板名称（中文） |
-| `fields` | string | 否 | JSON 格式的字段定义 |
 
 **响应**：
 
@@ -43,7 +42,7 @@ POST /api/v1/admin/notification/templates
 curl -X POST http://localhost:8080/api/v1/admin/notification/templates \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
-  -d '{"code":"deadline_remind","wechat_template_id":"tmpl_123","name":"截止提醒","fields":"{\"thing1\":\"事项\"}"}'
+  -d '{"code":"deadline_remind","wechat_template_id":"tmpl_123","name":"截止提醒"}'
 ```
 
 ---
@@ -138,7 +137,7 @@ POST /api/v1/user/subscribe/report
 
 **权限**：已登录用户（JWT 认证）
 
-**说明**：前端调用 `wx.requestSubscribeMessage` 后，将用户订阅结果上报给后端。
+**说明**：前端调用 `wx.requestSubscribeMessage` 后，将用户订阅结果上报给后端。当 `status` 为 `accept` 时，后端会将该模板的可用订阅次数累计加 1；后端发送订阅消息成功后，会自动消耗 1 次。
 
 **请求体**：
 
@@ -150,7 +149,19 @@ POST /api/v1/user/subscribe/report
 
 **响应**：
 
-- `200 OK`：`{"data": {"ok": true}}`
+- `200 OK`：
+
+```json
+{
+  "data": {
+    "ok": true,
+    "status": "subscribed",
+    "granted_count": 2,
+    "consumed_count": 1,
+    "remaining_count": 1
+  }
+}
+```
 - `400 Bad Request`：参数错误或 status 值非法（仅支持 `accept/reject/ban/filter`）
 - `401 Unauthorized`：未登录
 
@@ -162,6 +173,12 @@ curl -X POST http://localhost:8080/api/v1/user/subscribe/report \
   -H "Content-Type: application/json" \
   -d '{"template_code":"deadline_remind","wechat_template_id":"tmpl_123","status":"accept"}'
 ```
+
+**订阅次数规则**：
+
+- 每次前端成功上报一次 `accept`，后端都会将 `granted_count` 加 1
+- 只有后端真正发送订阅消息成功时，才会将 `consumed_count` 加 1
+- 当前实现以 `status = subscribed` 且 `granted_count > consumed_count` 作为“仍可发送”的判断条件
 
 ---
 

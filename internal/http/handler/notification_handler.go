@@ -21,7 +21,6 @@ type createNotificationTemplateReq struct {
 	Code             string `json:"code" binding:"required"`
 	WechatTemplateID string `json:"wechat_template_id" binding:"required"`
 	Name             string `json:"name" binding:"required"`
-	Fields           string `json:"fields"`
 }
 
 // NewNotificationHandler creates a NotificationHandler with the given service.
@@ -51,7 +50,6 @@ func (h *NotificationHandler) CreateTemplate(c *gin.Context) {
 		Code:             req.Code,
 		WechatTemplateID: req.WechatTemplateID,
 		Name:             req.Name,
-		Fields:           req.Fields,
 	}
 
 	if err := h.svc.CreateTemplate(tmpl); err != nil {

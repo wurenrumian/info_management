@@ -64,19 +64,42 @@ func (h *SubscribeHandler) ReportSubscribe(c *gin.Context) {
 	}
 
 	if errors.Is(err, gorm.ErrRecordNotFound) {
+		if status == "subscribed" {
+			sub.GrantedCount = 1
+		}
 		sub.SubscribedAt = now
 		if err := h.db.Create(&sub).Error; err != nil {
 			response.Error(c, 500, "failed to record subscription")
 			return
 		}
 	} else {
-		if err := h.db.Model(&model.UserSubscribe{}).Where("id = ?", existing.ID).Updates(sub).Error; err != nil {
+		updates := map[string]any{
+			"wechat_template_id": req.WechatTemplateID,
+			"status":             status,
+			"updated_at":         now,
+		}
+		if status == "subscribed" {
+			updates["granted_count"] = gorm.Expr("granted_count + ?", 1)
+		}
+		if err := h.db.Model(&model.UserSubscribe{}).Where("id = ?", existing.ID).Updates(updates).Error; err != nil {
 			response.Error(c, 500, "failed to update subscription")
 			return
 		}
 	}
 
-	response.OK(c, gin.H{"ok": true})
+	current, err := h.getUserSubscribe(actor.UserID, req.TemplateCode)
+	if err != nil {
+		response.Error(c, 500, "failed to query subscription")
+		return
+	}
+
+	response.OK(c, gin.H{
+		"ok":              true,
+		"status":          current.Status,
+		"granted_count":   current.GrantedCount,
+		"consumed_count":  current.ConsumedCount,
+		"remaining_count": remainingSubscribeCount(current),
+	})
 }
 
 // wechatEventXML represents the XML event push from WeChat server.
@@ -174,4 +197,20 @@ func mapSubscribeStatus(raw string) (string, bool) {
 	default:
 		return "", false
 	}
+}
+
+func (h *SubscribeHandler) getUserSubscribe(userID uint, templateCode string) (*model.UserSubscribe, error) {
+	var sub model.UserSubscribe
+	if err := h.db.Where("user_id = ? AND template_code = ?", userID, templateCode).First(&sub).Error; err != nil {
+		return nil, err
+	}
+	return &sub, nil
+}
+
+func remainingSubscribeCount(sub *model.UserSubscribe) int {
+	remaining := sub.GrantedCount - sub.ConsumedCount
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
 }

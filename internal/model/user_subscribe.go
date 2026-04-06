@@ -9,6 +9,8 @@ type UserSubscribe struct {
 	TemplateCode     string    `gorm:"type:varchar(64);index;not null" json:"template_code"`
 	WechatTemplateID string    `gorm:"type:varchar(100);not null" json:"wechat_template_id"`
 	Status           string    `gorm:"type:varchar(20);not null;default:subscribed" json:"status"`
+	GrantedCount     int       `gorm:"not null;default:0" json:"granted_count"`
+	ConsumedCount    int       `gorm:"not null;default:0" json:"consumed_count"`
 	SubscribedAt     time.Time `json:"subscribed_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }

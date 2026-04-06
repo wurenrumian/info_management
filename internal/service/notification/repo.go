@@ -39,12 +39,20 @@ func (r *Repo) CreateLog(log *model.NotificationLog) error {
 func (r *Repo) IsUserSubscribed(userID uint, templateCode string) (bool, error) {
 	var total int64
 	err := r.db.Model(&model.UserSubscribe{}).
-		Where("user_id = ? AND template_code = ? AND status = ?", userID, templateCode, "subscribed").
+		Where("user_id = ? AND template_code = ? AND status = ? AND granted_count > consumed_count", userID, templateCode, "subscribed").
 		Count(&total).Error
 	if err != nil {
 		return false, err
 	}
 	return total > 0, nil
+}
+
+// ConsumeSubscription increments consumed_count after a successful send.
+func (r *Repo) ConsumeSubscription(userID uint, templateCode string) error {
+	return r.db.Model(&model.UserSubscribe{}).
+		Where("user_id = ? AND template_code = ? AND status = ? AND granted_count > consumed_count", userID, templateCode, "subscribed").
+		Update("consumed_count", gorm.Expr("consumed_count + ?", 1)).
+		Error
 }
 
 // CountUnreadByUser returns the number of unread notifications for a user.
