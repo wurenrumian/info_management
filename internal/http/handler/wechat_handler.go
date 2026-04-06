@@ -385,9 +385,6 @@ func (h *WechatHandler) DevLoginAndSendSubscribeCheck(c *gin.Context) {
 			"status":             subStatus,
 			"updated_at":         now,
 		}
-		if subStatus == "subscribed" {
-			updates["granted_count"] = gorm.Expr("granted_count + ?", 1)
-		}
 		if err := h.db.Model(&model.UserSubscribe{}).Where("id = ?", existing.ID).Updates(updates).Error; err != nil {
 			response.Error(c, 500, "failed to update subscription")
 			return
