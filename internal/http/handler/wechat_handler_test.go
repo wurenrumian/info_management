@@ -7,13 +7,22 @@ import (
 	"os"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
+	"manage/internal/http/handler"
 	"manage/internal/http/router"
 	"manage/internal/model"
+	"manage/internal/service/notification"
 )
+
+type mockDevSubscribeWechatClient struct{}
+
+func (m *mockDevSubscribeWechatClient) SendSubscribeMessage(openid, templateID, page string, data map[string]interface{}) error {
+	return nil
+}
 
 func setupWechatTestRouter(t *testing.T) (*gorm.DB, http.Handler) {
 	t.Helper()
@@ -235,6 +244,47 @@ func TestDevLoginAndSendSubscribeCheckFillsLoginTemplateDefaults(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Body.String(), `"send_ok":true`)
+}
+
+func TestDevLoginAndSendSubscribeCheckDoesNotIncreaseGrantedCountOnSuccessfulSend(t *testing.T) {
+	t.Setenv("APP_ENV", "dev")
+
+	db, _ := setupWechatTestRouter(t)
+	require.NoError(t, db.Create(&model.NotificationTemplate{
+		Code:             "dev_login_check",
+		WechatTemplateID: "tmpl_dev_check",
+		Name:             "Dev Login Check",
+	}).Error)
+	require.NoError(t, db.Create(&model.UserSubscribe{
+		UserID:           100,
+		TemplateCode:     "dev_login_check",
+		WechatTemplateID: "tmpl_dev_check",
+		Status:           "subscribed",
+		GrantedCount:     1,
+		ConsumedCount:    0,
+	}).Error)
+
+	notifSvc := notification.NewService(
+		&mockDevSubscribeWechatClient{},
+		notification.NewRepo(db),
+		notification.NewGormUserRepo(db),
+	)
+	wechatHandler := handler.NewWechatHandler(db, "", "", "test-secret", notifSvc)
+
+	body := []byte(`{"student_id":"S100","template_code":"dev_login_check","wechat_template_id":"tmpl_dev_check","status":"accept","open_id":"dev-openid-s100"}`)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/dev/login-and-send-subscribe-check", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	wechatHandler.DevLoginAndSendSubscribeCheck(c)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var sub model.UserSubscribe
+	require.NoError(t, db.Where("user_id = ? AND template_code = ?", 100, "dev_login_check").First(&sub).Error)
+	require.Equal(t, 1, sub.GrantedCount)
+	require.Equal(t, 1, sub.ConsumedCount)
 }
 
 func TestPublicRegisterCreatesUserWhenMissing(t *testing.T) {
