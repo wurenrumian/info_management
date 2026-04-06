@@ -190,6 +190,9 @@ func TestDevLoginAndSendSubscribeCheckCreatesSubscription(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Body.String(), `"token"`)
 	require.Contains(t, w.Body.String(), `"send_ok":true`)
+	require.Contains(t, w.Body.String(), `"granted_count":1`)
+	require.Contains(t, w.Body.String(), `"consumed_count":0`)
+	require.Contains(t, w.Body.String(), `"remaining_count":1`)
 
 	var tmpl model.NotificationTemplate
 	require.NoError(t, db.Where("code = ?", "dev_login_check").First(&tmpl).Error)
@@ -198,6 +201,8 @@ func TestDevLoginAndSendSubscribeCheckCreatesSubscription(t *testing.T) {
 	var sub model.UserSubscribe
 	require.NoError(t, db.Where("user_id = ? AND template_code = ?", 100, "dev_login_check").First(&sub).Error)
 	require.Equal(t, "subscribed", sub.Status)
+	require.Equal(t, 1, sub.GrantedCount)
+	require.Equal(t, 0, sub.ConsumedCount)
 
 	var user model.User
 	require.NoError(t, db.Where("id = ?", 100).First(&user).Error)

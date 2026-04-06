@@ -344,7 +344,6 @@ func (h *WechatHandler) DevLoginAndSendSubscribeCheck(c *gin.Context) {
 			Code:             templateCode,
 			WechatTemplateID: wechatTemplateID,
 			Name:             "Dev Login Check",
-			Fields:           `{"thing1":"验证消息","time2":"时间"}`,
 		}); createErr != nil {
 			response.Error(c, 500, "create dev notification template failed")
 			return
@@ -369,6 +368,9 @@ func (h *WechatHandler) DevLoginAndSendSubscribeCheck(c *gin.Context) {
 
 	switch {
 	case errors.Is(err, gorm.ErrRecordNotFound):
+		if subStatus == "subscribed" {
+			sub.GrantedCount = 1
+		}
 		sub.SubscribedAt = now
 		if err := h.db.Create(&sub).Error; err != nil {
 			response.Error(c, 500, "failed to record subscription")
@@ -378,7 +380,15 @@ func (h *WechatHandler) DevLoginAndSendSubscribeCheck(c *gin.Context) {
 		response.Error(c, 500, "failed to query subscription")
 		return
 	default:
-		if err := h.db.Model(&model.UserSubscribe{}).Where("id = ?", existing.ID).Updates(sub).Error; err != nil {
+		updates := map[string]any{
+			"wechat_template_id": wechatTemplateID,
+			"status":             subStatus,
+			"updated_at":         now,
+		}
+		if subStatus == "subscribed" {
+			updates["granted_count"] = gorm.Expr("granted_count + ?", 1)
+		}
+		if err := h.db.Model(&model.UserSubscribe{}).Where("id = ?", existing.ID).Updates(updates).Error; err != nil {
 			response.Error(c, 500, "failed to update subscription")
 			return
 		}
@@ -406,14 +416,31 @@ func (h *WechatHandler) DevLoginAndSendSubscribeCheck(c *gin.Context) {
 		sendErr = "subscription status is reject"
 	}
 
+	currentSub, err := h.subscribeHandlerState(user.ID, templateCode)
+	if err != nil {
+		response.Error(c, 500, "failed to query subscription")
+		return
+	}
+
 	response.OK(c, gin.H{
 		"token":               token,
 		"user":                user,
 		"template_code":       templateCode,
 		"subscription_status": subStatus,
+		"granted_count":       currentSub.GrantedCount,
+		"consumed_count":      currentSub.ConsumedCount,
+		"remaining_count":     remainingSubscribeCount(currentSub),
 		"send_ok":             sendOK,
 		"send_error":          sendErr,
 	})
+}
+
+func (h *WechatHandler) subscribeHandlerState(userID uint, templateCode string) (*model.UserSubscribe, error) {
+	var sub model.UserSubscribe
+	if err := h.db.Where("user_id = ? AND template_code = ?", userID, templateCode).First(&sub).Error; err != nil {
+		return nil, err
+	}
+	return &sub, nil
 }
 
 func (h *WechatHandler) writeDevLoginError(c *gin.Context, err error, fallback string) {

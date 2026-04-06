@@ -21,6 +21,7 @@ type RepoInterface interface {
 	CreateTemplate(t *model.NotificationTemplate) error
 	CreateLog(log *model.NotificationLog) error
 	IsUserSubscribed(userID uint, templateCode string) (bool, error)
+	ConsumeSubscription(userID uint, templateCode string) error
 	CountUnreadByUser(userID uint) (int64, error)
 	ListLogs(filter LogFilter) ([]model.NotificationLog, int64, error)
 }
@@ -97,6 +98,10 @@ func (s *Service) Send(ctx context.Context, req SendRequest) error {
 	if err != nil {
 		s.recordLog(req, "failed", err.Error())
 		return fmt.Errorf("send subscribe message: %w", err)
+	}
+	if err := s.repo.ConsumeSubscription(req.UserID, req.TemplateCode); err != nil {
+		s.recordLog(req, "failed", fmt.Sprintf("consume subscription: %v", err))
+		return fmt.Errorf("consume subscription: %w", err)
 	}
 
 	s.recordLog(req, "sent", "")
