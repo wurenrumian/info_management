@@ -3,7 +3,9 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
+	"net/http"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -475,50 +477,9 @@ func (h *AdminKnowledgeHandler) GenerateQAPreview(c *gin.Context) {
 		return
 	}
 
-	var req qaGeneratePreviewReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, 400, "invalid body")
+	req, inputs, ok := h.parseQAPreviewRequest(c, actor)
+	if !ok {
 		return
-	}
-	fileIDs := dedupeUint(req.FileIDs)
-	if len(fileIDs) == 0 {
-		response.Error(c, 400, "missing file_ids")
-		return
-	}
-	if err := ksvc.ValidateCountRange(req.QACountRange); err != nil {
-		response.Error(c, 400, "invalid qa_count_range")
-		return
-	}
-	log.Printf("[knowledge-ai] preview request user_id=%d role=%d files=%d range=%d-%d", actor.UserID, actor.Role, len(fileIDs), req.QACountRange.Min, req.QACountRange.Max)
-
-	docs, err := h.documentRepo.ListByIDs(fileIDs)
-	if err != nil {
-		response.Error(c, 500, "generate preview failed")
-		return
-	}
-	if len(docs) != len(fileIDs) {
-		response.Error(c, 400, "file not found")
-		return
-	}
-
-	docByID := make(map[uint]model.Document, len(docs))
-	for _, d := range docs {
-		docByID[d.ID] = d
-	}
-	inputs := make([]ksvc.QADocumentInput, 0, len(fileIDs))
-	for _, fileID := range fileIDs {
-		doc, ok := docByID[fileID]
-		if !ok {
-			response.Error(c, 400, "file not found")
-			return
-		}
-		inputs = append(inputs, ksvc.QADocumentInput{
-			FileID:      doc.ID,
-			Title:       doc.Title,
-			FilePath:    doc.FilePath,
-			URL:         "/uploads/" + doc.FilePath,
-			ContentText: doc.ContentText,
-		})
 	}
 
 	drafts, err := h.qaGenerator.Generate(c.Request.Context(), inputs, req.QACountRange)
@@ -531,6 +492,104 @@ func (h *AdminKnowledgeHandler) GenerateQAPreview(c *gin.Context) {
 
 	h.auditLogger.Log(c, actor, "knowledge.ai_generate_preview", "knowledge", 0)
 	response.List(c, drafts, int64(len(drafts)))
+}
+
+// GenerateQAPreviewStream generates editable QA drafts and returns SSE events.
+func (h *AdminKnowledgeHandler) GenerateQAPreviewStream(c *gin.Context) {
+	actor, ok := auth.GetActor(c)
+	if !ok {
+		response.Error(c, 401, "unauthorized")
+		return
+	}
+	if actor.Role < model.RoleTeacher {
+		response.Error(c, 403, "forbidden")
+		return
+	}
+
+	req, inputs, ok := h.parseQAPreviewRequest(c, actor)
+	if !ok {
+		return
+	}
+
+	drafts, err := h.qaGenerator.Generate(c.Request.Context(), inputs, req.QACountRange)
+	if err != nil {
+		log.Printf("[knowledge-ai] preview stream failed user_id=%d err=%v", actor.UserID, err)
+		response.Error(c, 500, "generate preview failed")
+		return
+	}
+	log.Printf("[knowledge-ai] preview stream success user_id=%d items=%d", actor.UserID, len(drafts))
+
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		response.Error(c, 500, "stream not supported")
+		return
+	}
+
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+	c.Status(http.StatusOK)
+
+	body, _ := json.Marshal(gin.H{
+		"items": drafts,
+		"total": len(drafts),
+	})
+	_, _ = fmt.Fprintf(c.Writer, "event: drafts\ndata: %s\n\n", string(body))
+	flusher.Flush()
+	_, _ = fmt.Fprint(c.Writer, "event: done\ndata: [DONE]\n\n")
+	flusher.Flush()
+
+	h.auditLogger.Log(c, actor, "knowledge.ai_generate_preview", "knowledge", 0)
+}
+
+func (h *AdminKnowledgeHandler) parseQAPreviewRequest(c *gin.Context, actor auth.Actor) (qaGeneratePreviewReq, []ksvc.QADocumentInput, bool) {
+	var req qaGeneratePreviewReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, 400, "invalid body")
+		return qaGeneratePreviewReq{}, nil, false
+	}
+	fileIDs := dedupeUint(req.FileIDs)
+	if len(fileIDs) == 0 {
+		response.Error(c, 400, "missing file_ids")
+		return qaGeneratePreviewReq{}, nil, false
+	}
+	if err := ksvc.ValidateCountRange(req.QACountRange); err != nil {
+		response.Error(c, 400, "invalid qa_count_range")
+		return qaGeneratePreviewReq{}, nil, false
+	}
+	log.Printf("[knowledge-ai] preview request user_id=%d role=%d files=%d range=%d-%d", actor.UserID, actor.Role, len(fileIDs), req.QACountRange.Min, req.QACountRange.Max)
+
+	docs, err := h.documentRepo.ListByIDs(fileIDs)
+	if err != nil {
+		response.Error(c, 500, "generate preview failed")
+		return qaGeneratePreviewReq{}, nil, false
+	}
+	if len(docs) != len(fileIDs) {
+		response.Error(c, 400, "file not found")
+		return qaGeneratePreviewReq{}, nil, false
+	}
+	docByID := make(map[uint]model.Document, len(docs))
+	for _, d := range docs {
+		docByID[d.ID] = d
+	}
+
+	inputs := make([]ksvc.QADocumentInput, 0, len(fileIDs))
+	for _, fileID := range fileIDs {
+		doc, exists := docByID[fileID]
+		if !exists {
+			response.Error(c, 400, "file not found")
+			return qaGeneratePreviewReq{}, nil, false
+		}
+		inputs = append(inputs, ksvc.QADocumentInput{
+			FileID:      doc.ID,
+			Title:       doc.Title,
+			FilePath:    doc.FilePath,
+			URL:         "/uploads/" + doc.FilePath,
+			ContentText: doc.ContentText,
+		})
+	}
+	return req, inputs, true
 }
 
 // BatchCreateKnowledge creates multiple knowledge items in one transaction.

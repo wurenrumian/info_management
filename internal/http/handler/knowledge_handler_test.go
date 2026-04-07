@@ -409,6 +409,50 @@ func TestAdminKnowledgeQAGeneratePreviewByTeacher(t *testing.T) {
 	require.Contains(t, w.Body.String(), `"total":`)
 }
 
+func TestAdminKnowledgeQAGeneratePreviewStreamForbiddenForCadre(t *testing.T) {
+	_, r := setupKnowledgeTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/knowledge/qa-generate-preview/stream", bytes.NewBufferString(`{"file_ids":[1],"qa_count_range":{"min":1,"max":2}}`))
+	req.Header.Set("Content-Type", "application/json")
+	token := testutil.GenerateTestToken(300, 2, 0, "")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusForbidden, w.Code)
+	require.Contains(t, w.Body.String(), "forbidden")
+}
+
+func TestAdminKnowledgeQAGeneratePreviewStreamByTeacher(t *testing.T) {
+	db, r := setupKnowledgeTestRouter(t)
+	doc := model.Document{
+		Title:       "k.docx",
+		FilePath:    "knowledge/2026/04/k.docx",
+		FileSize:    100,
+		ContentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		ContentText: "奖学金申请需要成绩单",
+		UploaderID:  100,
+	}
+	require.NoError(t, db.Create(&doc).Error)
+
+	reqBody := `{"file_ids":[` + strconv.Itoa(int(doc.ID)) + `],"qa_count_range":{"min":1,"max":2}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/knowledge/qa-generate-preview/stream", bytes.NewBufferString(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	token := testutil.GenerateTestToken(400, 3, 0, "")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Header().Get("Content-Type"), "text/event-stream")
+	require.Contains(t, w.Body.String(), "event: drafts")
+	require.Contains(t, w.Body.String(), `"attachment_file_ids"`)
+	require.Contains(t, w.Body.String(), "event: done")
+	require.Contains(t, w.Body.String(), "data: [DONE]")
+}
+
 func TestAdminKnowledgeBatchAllOrNothing(t *testing.T) {
 	db, r := setupKnowledgeTestRouter(t)
 
