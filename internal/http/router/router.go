@@ -77,6 +77,7 @@ func New(db *gorm.DB) *gin.Engine {
 	admin.GET("/knowledge/:id", adminKnowledgeHandler.GetKnowledge)
 	admin.POST("/knowledge", adminKnowledgeHandler.CreateKnowledge)
 	admin.POST("/knowledge/qa-generate-preview", adminKnowledgeHandler.GenerateQAPreview)
+	admin.POST("/knowledge/qa-generate-preview/stream", adminKnowledgeHandler.GenerateQAPreviewStream)
 	admin.POST("/knowledge/batch", adminKnowledgeHandler.BatchCreateKnowledge)
 	admin.POST("/knowledge/:id/attachments", adminKnowledgeHandler.BindAttachments)
 	admin.GET("/knowledge/:id/attachments", adminKnowledgeHandler.ListAttachments)

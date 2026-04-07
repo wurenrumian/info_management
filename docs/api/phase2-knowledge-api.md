@@ -96,6 +96,7 @@
 - `GET /api/v1/admin/knowledge/:id`
 - `POST /api/v1/admin/knowledge`
 - `POST /api/v1/admin/knowledge/qa-generate-preview`（AI 生成问答草稿，仅预览不入库）
+- `POST /api/v1/admin/knowledge/qa-generate-preview/stream`（SSE 版本，便于前端实时消费）
 - `POST /api/v1/admin/knowledge/batch`（批量提交问答，事务全成功）
 - `POST /api/v1/admin/knowledge/:id/attachments`（批量绑定附件）
 - `GET /api/v1/admin/knowledge/:id/attachments`（查询已绑定附件）
@@ -236,6 +237,29 @@
 说明：
 
 - 预览阶段 `keywords` 为可选字段，AI 可不返回。
+- 该接口对前端仍返回普通 JSON（非流式响应）。
+- 服务端调用 AI Provider 时使用 `stream=true`（SSE）流式接收并在服务端聚合后解析，兼容以下返回形态：
+  - SSE 分片（`data: ...` + `data: [DONE]`）
+  - 非流式一次性 JSON（兼容兜底）
+
+### POST /api/v1/admin/knowledge/qa-generate-preview/stream
+
+权限：`role >= 3`
+
+请求体：与 `POST /api/v1/admin/knowledge/qa-generate-preview` 相同。
+
+响应：`text/event-stream`
+
+事件格式：
+
+- `event: drafts`
+  - `data`: `{"items":[...],"total":N}`
+- `event: done`
+  - `data`: `[DONE]`
+
+说明：
+
+- 该端点用于前端流式消费；服务端会在生成完成后推送 `drafts` 事件并以 `done` 收尾。
 
 ### POST /api/v1/admin/knowledge/batch
 

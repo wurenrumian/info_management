@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -240,6 +241,7 @@ func (g *OpenAICompatGenerator) Generate(ctx context.Context, docs []QADocumentI
 			{"role": "system", "content": "你是高校管理系统知识库问答生成助手，固定使用 friendly 风格。请先像真实学生提问、像有经验且耐心的老师或辅导员回答，再提取关键词。问题要口语化、具体、可检索；回答要亲和、直接、完整、可执行，不说空话。回答中如果有步骤/条件，必须使用自然换行（\\n）分段，不要挤成一行。关键词必须是可检索主题词，严禁模板词、占位符、字段名、文件名。你必须只输出 JSON，格式严格为 {\"items\":[...]}，不要输出任何解释文本。"},
 			{"role": "user", "content": buildUserPrompt(docs, countRange)},
 		},
+		"stream":          true,
 		"effort":          "none",
 		"temperature":     0.2,
 	}
@@ -265,11 +267,40 @@ func (g *OpenAICompatGenerator) Generate(ctx context.Context, docs []QADocumentI
 		return nil, ErrGeneratePreview
 	}
 
-	raw, err := io.ReadAll(resp.Body)
+	content, err := readModelContent(resp.Body)
 	if err != nil {
-		log.Printf("[knowledge-ai] provider=%s read response failed err=%v", g.provider, err)
+		log.Printf("[knowledge-ai] provider=%s read model content failed err=%v", g.provider, err)
 		return nil, ErrGeneratePreview
 	}
+	if strings.TrimSpace(content) == "" {
+		log.Printf("[knowledge-ai] provider=%s empty choices/content", g.provider)
+		return nil, ErrGeneratePreview
+	}
+	items, err := ParseDraftsJSON(content, countRange, allowed)
+	if err != nil {
+		log.Printf("[knowledge-ai] provider=%s parse drafts failed err=%v content=%s", g.provider, err, truncateForLog(content, 600))
+		return nil, ErrGeneratePreview
+	}
+	log.Printf("[knowledge-ai] provider=%s success items=%d", g.provider, len(items))
+	return items, nil
+}
+
+func readModelContent(body io.Reader) (string, error) {
+	b, err := io.ReadAll(body)
+	if err != nil {
+		return "", err
+	}
+	raw := strings.TrimSpace(string(b))
+	if raw == "" {
+		return "", nil
+	}
+	if strings.Contains(raw, "data:") {
+		streamContent, err := readSSEContent(strings.NewReader(raw))
+		if err == nil && strings.TrimSpace(streamContent) != "" {
+			return streamContent, nil
+		}
+	}
+
 	var out struct {
 		Choices []struct {
 			Message struct {
@@ -277,21 +308,83 @@ func (g *OpenAICompatGenerator) Generate(ctx context.Context, docs []QADocumentI
 			} `json:"message"`
 		} `json:"choices"`
 	}
-	if err := json.Unmarshal(raw, &out); err != nil {
-		log.Printf("[knowledge-ai] provider=%s unmarshal response failed err=%v body=%s", g.provider, err, truncateForLog(string(raw), 600))
-		return nil, ErrGeneratePreview
+	if err := json.Unmarshal(b, &out); err != nil {
+		return "", err
 	}
-	if len(out.Choices) == 0 || strings.TrimSpace(out.Choices[0].Message.Content) == "" {
-		log.Printf("[knowledge-ai] provider=%s empty choices/content body=%s", g.provider, truncateForLog(string(raw), 600))
-		return nil, ErrGeneratePreview
+	if len(out.Choices) == 0 {
+		return "", nil
 	}
-	items, err := ParseDraftsJSON(out.Choices[0].Message.Content, countRange, allowed)
-	if err != nil {
-		log.Printf("[knowledge-ai] provider=%s parse drafts failed err=%v content=%s", g.provider, err, truncateForLog(out.Choices[0].Message.Content, 600))
-		return nil, ErrGeneratePreview
+	return out.Choices[0].Message.Content, nil
+}
+
+func readSSEContent(r io.Reader) (string, error) {
+	scanner := bufio.NewScanner(r)
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 1024*1024)
+
+	var payload strings.Builder
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, ":") {
+			continue
+		}
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if data == "" {
+			continue
+		}
+		if data == "[DONE]" {
+			break
+		}
+
+		var chunk struct {
+			Choices []struct {
+				Delta struct {
+					Content json.RawMessage `json:"content"`
+				} `json:"delta"`
+			} `json:"choices"`
+		}
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			continue
+		}
+		for _, choice := range chunk.Choices {
+			payload.WriteString(extractDeltaContent(choice.Delta.Content))
+		}
 	}
-	log.Printf("[knowledge-ai] provider=%s success items=%d", g.provider, len(items))
-	return items, nil
+	if err := scanner.Err(); err != nil {
+		return "", err
+	}
+	return payload.String(), nil
+}
+
+func extractDeltaContent(raw json.RawMessage) string {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return ""
+	}
+
+	var plain string
+	if err := json.Unmarshal(raw, &plain); err == nil {
+		return plain
+	}
+
+	var parts []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(raw, &parts); err != nil {
+		return ""
+	}
+
+	var out strings.Builder
+	for _, p := range parts {
+		if p.Type == "text" {
+			out.WriteString(p.Text)
+		}
+	}
+	return out.String()
 }
 
 func buildUserPrompt(docs []QADocumentInput, countRange QACountRange) string {
