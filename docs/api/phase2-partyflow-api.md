@@ -1,32 +1,218 @@
-# Phase2 PartyFlow API (v0 Placeholder)
+# Phase2 PartyFlow API
 
 ## Base URL
 
 `/api/v1`
 
-## Scope
+## Required Headers
 
-该文档作为并行开发占位稿，后续由模块 owner 补充完整接口细节。
+- `Authorization: Bearer <token>`
 
-## Planned Endpoints (Draft)
+## Student Endpoint
 
 - `GET /api/v1/partyflow/me`
-- `GET /api/v1/admin/partyflow/progress`
+
+权限：
+- 登录学生
+
+成功响应：
+
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "flow_type": "party",
+      "current_stage": "activist",
+      "stage_started_at": "2026-03-01T00:00:00Z",
+      "next_action_hint": "满3个月后提交思想汇报",
+      "reminder_rule_code": "party_activist_90d",
+      "history": [
+        {
+          "id": 11,
+          "from_stage": "applicant",
+          "to_stage": "activist",
+          "event_type": "update",
+          "note": "支部确认",
+          "happened_at": "2026-03-01T00:00:00Z"
+        }
+      ],
+      "created_at": "2026-03-01T00:00:00Z",
+      "updated_at": "2026-03-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+错误响应：
+
+- `401 {"error":"unauthorized"}`
+- `403 {"error":"forbidden"}`
+
+## Admin Endpoints
+
+- `GET /api/v1/admin/partyflow/progress?flow_type=party&student_id=2023001&limit=20&offset=0`
+- `GET /api/v1/admin/partyflow/progress/:id`
+- `POST /api/v1/admin/partyflow/progress`
 - `PATCH /api/v1/admin/partyflow/progress/:id`
+- `POST /api/v1/admin/partyflow/progress/import`
 
-## Permissions (Draft)
+权限：
+- `role >= 2`
 
-- 学生：仅可查看本人党团进度
-- 管理员（role >= 2）：可按 scope 查询与更新
+### GET /api/v1/admin/partyflow/progress
 
-## Response Convention
+查询参数：
 
-- 成功：`{"data": ...}`
-- 失败：`{"error": "..."}`
-- 列表：`{"data": [...], "total": N}`
+- `flow_type`：可选，`party` / `league`
+- `student_id`：可选，按学号过滤
+- `limit`：可选，默认 `20`
+- `offset`：可选，默认 `0`
 
-## TODO
+成功响应：
 
-- 补充请求/响应字段定义
-- 补充错误码细则
-- 补充测试命令与覆盖清单
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "user_id": 100,
+      "student_id": "2023001",
+      "student_name": "张三",
+      "flow_type": "party",
+      "current_stage": "activist",
+      "stage_started_at": "2026-03-01T00:00:00Z",
+      "next_action_hint": "满3个月后提交思想汇报",
+      "reminder_rule_code": "party_activist_90d",
+      "created_at": "2026-03-01T00:00:00Z",
+      "updated_at": "2026-03-10T00:00:00Z"
+    }
+  ],
+  "total": 1
+}
+```
+
+### GET /api/v1/admin/partyflow/progress/:id
+
+成功响应：
+
+```json
+{
+  "data": {
+    "id": 1,
+    "user_id": 100,
+    "student_id": "2023001",
+    "student_name": "张三",
+    "flow_type": "party",
+    "current_stage": "activist",
+    "stage_started_at": "2026-03-01T00:00:00Z",
+    "next_action_hint": "满3个月后提交思想汇报",
+    "reminder_rule_code": "party_activist_90d",
+    "history": [
+      {
+        "id": 11,
+        "from_stage": "applicant",
+        "to_stage": "activist",
+        "event_type": "update",
+        "note": "支部确认",
+        "happened_at": "2026-03-01T00:00:00Z"
+      }
+    ],
+    "created_at": "2026-03-01T00:00:00Z",
+    "updated_at": "2026-03-10T00:00:00Z"
+  }
+}
+```
+
+### POST /api/v1/admin/partyflow/progress
+
+请求体：
+
+```json
+{
+  "user_id": 100,
+  "flow_type": "party",
+  "current_stage": "activist",
+  "stage_started_at": "2026-03-01T00:00:00Z",
+  "next_action_hint": "满3个月后提交思想汇报",
+  "note": "初始化"
+}
+```
+
+### PATCH /api/v1/admin/partyflow/progress/:id
+
+请求体：
+
+```json
+{
+  "current_stage": "development_target",
+  "stage_started_at": "2026-06-01T00:00:00Z",
+  "next_action_hint": "准备发展材料",
+  "note": "进入发展对象阶段"
+}
+```
+
+### POST /api/v1/admin/partyflow/progress/import
+
+请求体：
+
+```json
+{
+  "items": [
+    {
+      "student_id": "2023001",
+      "flow_type": "party",
+      "current_stage": "activist",
+      "stage_started_at": "2026-03-01T00:00:00Z",
+      "next_action_hint": "满3个月后提交思想汇报",
+      "note": "班级批量导入"
+    }
+  ]
+}
+```
+
+成功响应：
+
+```json
+{
+  "data": {
+    "success_count": 1,
+    "failed_count": 0,
+    "failed_items": []
+  }
+}
+```
+
+错误响应：
+
+- `400 {"error":"invalid flow_type"}`
+- `400 {"error":"invalid current_stage"}`
+- `400 {"error":"invalid id"}`
+- `401 {"error":"unauthorized"}`
+- `403 {"error":"forbidden"}`
+- `404 {"error":"partyflow progress not found"}`
+
+## Stage Enum
+
+### `league`
+
+- `applicant`
+- `activist`
+- `member`
+
+### `party`
+
+- `applicant`
+- `activist`
+- `development_target`
+- `probationary_member`
+- `full_member`
+
+## Audit Log
+
+写操作记录到 `admin_logs`：
+
+- `partyflow.create`
+- `partyflow.patch`
+- `partyflow.import`
+
