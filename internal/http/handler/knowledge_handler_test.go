@@ -587,7 +587,7 @@ func TestKnowledgeSearchHitsBoundPDFContent(t *testing.T) {
 	r.ServeHTTP(bindW, bindReq)
 	require.Equal(t, http.StatusOK, bindW.Code)
 
-	searchReq := httptest.NewRequest(http.MethodGet, "/api/v1/knowledge/search?q=C++技术栈", nil)
+	searchReq := httptest.NewRequest(http.MethodGet, "/api/v1/knowledge/search?q=分布式系统", nil)
 	searchToken := testutil.GenerateTestToken(100, 1, 1, "2023")
 	searchReq.Header.Set("Authorization", "Bearer "+searchToken)
 	searchW := httptest.NewRecorder()
