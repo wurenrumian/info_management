@@ -181,10 +181,10 @@ func (g *HeuristicQAGenerator) Generate(_ context.Context, docs []QADocumentInpu
 
 type OpenAICompatGenerator struct {
 	provider string
-	baseURL string
-	apiKey  string
-	model   string
-	client  *http.Client
+	baseURL  string
+	apiKey   string
+	model    string
+	client   *http.Client
 }
 
 func NewOpenAICompatGenerator(provider, baseURL, apiKey, model string) *OpenAICompatGenerator {
@@ -201,7 +201,7 @@ func NewOpenAICompatGenerator(provider, baseURL, apiKey, model string) *OpenAICo
 		baseURL:  baseURL,
 		apiKey:   strings.TrimSpace(apiKey),
 		model:    strings.TrimSpace(model),
-		client:  &http.Client{},
+		client:   &http.Client{},
 	}
 }
 
@@ -241,9 +241,9 @@ func (g *OpenAICompatGenerator) Generate(ctx context.Context, docs []QADocumentI
 			{"role": "system", "content": "你是高校管理系统知识库问答生成助手，固定使用 friendly 风格。请先像真实学生提问、像有经验且耐心的老师或辅导员回答，再提取关键词。问题要口语化、具体、可检索；回答要亲和、直接、完整、可执行，不说空话。回答中如果有步骤/条件，必须使用自然换行（\\n）分段，不要挤成一行。关键词必须是可检索主题词，严禁模板词、占位符、字段名、文件名。你必须只输出 JSON，格式严格为 {\"items\":[...]}，不要输出任何解释文本。"},
 			{"role": "user", "content": buildUserPrompt(docs, countRange)},
 		},
-		"stream":          true,
-		"effort":          "none",
-		"temperature":     0.2,
+		"stream":      true,
+		"effort":      "none",
+		"temperature": 0.2,
 	}
 	b, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, g.baseURL+"/v1/chat/completions", bytes.NewReader(b))

@@ -1,0 +1,31 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify formatting
+        run: |
+          go fmt ./...
+          git diff --exit-code
+
+      - name: Run vet
+        run: go vet ./...
+
+      - name: Run tests
+        run: go test ./... -count=1
