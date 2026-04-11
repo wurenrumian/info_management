@@ -37,4 +37,5 @@ jobs:
       - name: Push main to Gitee
         run: |
           git remote add gitee "${{ secrets.GITEE_REMOTE }}"
-          git push --force-with-lease gitee HEAD:main
+          git fetch --no-tags gitee main
+          git push --force-with-lease=refs/heads/main gitee HEAD:main
