@@ -95,6 +95,12 @@ Docker 容器以 UID 10001（`appuser`）运行，需要提前创建目录并授
 ./scripts/dev/prepare_upload_dirs.sh
 ```
 
+Windows PowerShell：
+
+```powershell
+.\scripts\dev\prepare_upload_dirs.ps1
+```
+
 ### 2.6 启动
 
 ```bash
