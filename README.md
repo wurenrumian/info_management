@@ -115,6 +115,11 @@ source ./scripts/dev/export.sh
 ./scripts/dev/prepare_upload_dirs.sh
 ```
 
+Windows PowerShell 可用：
+```powershell
+.\scripts\dev\prepare_upload_dirs.ps1
+```
+
 常用脚本：
 - `scripts/dev/dev_login_curl.sh`：获取 dev token
 - `scripts/dev/upload_api_curl.sh`：文件上传链路联调
