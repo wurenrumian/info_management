@@ -26,4 +26,12 @@ const (
 	ActionNotifTplGet     = "notification:template:get"
 	ActionNotifLogsList   = "notification:logs:list"
 	ActionNotifUnreadGet  = "notification:unread:get"
+	ActionAnnouncementsList      = "announcements:list"
+	ActionAnnouncementsGet       = "announcements:get"
+	ActionAnnouncementsAdminList = "announcements:admin:list"
+	ActionAnnouncementsAdminGet  = "announcements:admin:get"
+	ActionAnnouncementsCreate    = "announcements:create"
+	ActionAnnouncementsPatch     = "announcements:patch"
+	ActionAnnouncementsPublish   = "announcements:publish"
+	ActionAnnouncementsArchive   = "announcements:archive"
 )

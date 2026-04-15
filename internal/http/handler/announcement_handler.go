@@ -1,14 +1,14 @@
 package handler
 
 import (
-	"context"
+	"encoding/json"
+	"errors"
 	"strconv"
-	"time"
+	"strings"
 
 	"manage/internal/auth"
 	"manage/internal/http/response"
-	"manage/internal/model"
-	"manage/internal/repo"
+	annsvc "manage/internal/service/announcements"
 	"manage/internal/service/authz"
 	"manage/internal/service/notification"
 
@@ -16,30 +16,69 @@ import (
 	"gorm.io/gorm"
 )
 
+// AnnouncementHandler handles announcement related HTTP requests.
 type AnnouncementHandler struct {
-	db       *gorm.DB
-	repo     *repo.AnnouncementRepo
-	notifSvc *notification.Service
+	svc *annsvc.Service
 }
 
+// NewAnnouncementHandler creates a new AnnouncementHandler.
 func NewAnnouncementHandler(db *gorm.DB, notifSvc *notification.Service) *AnnouncementHandler {
 	return &AnnouncementHandler{
-		db:       db,
-		repo:     repo.NewAnnouncementRepo(db),
-		notifSvc: notifSvc,
+		svc: annsvc.NewService(db, notifSvc),
 	}
 }
 
+// CreateAnnouncementReq defines the request structure for creating an announcement.
 type CreateAnnouncementReq struct {
-	Title   string `json:"title" binding:"required"`
-	Content string `json:"content" binding:"required"`
+	Title             string           `json:"title" binding:"required"`
+	Content           string           `json:"content" binding:"required"`
+	AudienceType      string           `json:"audience_type"`
+	TargetScope       map[string]any   `json:"target_scope"`
+	Tags              []string         `json:"tags"`
+	AttachmentFileIDs []uint           `json:"attachment_file_ids"`
+	ExternalLinks     []map[string]any `json:"external_links"`
 }
 
-func parseID(c *gin.Context) uint {
-	id, _ := strconv.Atoi(c.Param("id"))
-	return uint(id)
+type PublishAnnouncementReq struct {
+	SendNotification bool   `json:"send_notification"`
+	TemplateCode     string `json:"template_code"`
 }
 
+type PatchAnnouncementReq struct {
+	Title             *string           `json:"title"`
+	Content           *string           `json:"content"`
+	AudienceType      *string           `json:"audience_type"`
+	TargetScope       *map[string]any   `json:"target_scope"`
+	Tags              *[]string         `json:"tags"`
+	AttachmentFileIDs *[]uint           `json:"attachment_file_ids"`
+	ExternalLinks     *[]map[string]any `json:"external_links"`
+}
+
+func parseUintParam(c *gin.Context, key string) (uint, bool) {
+	id, err := strconv.ParseUint(c.Param(key), 10, 64)
+	if err != nil || id == 0 {
+		return 0, false
+	}
+	return uint(id), true
+}
+
+func parsePagination(c *gin.Context) (int, int) {
+	limit := 20
+	offset := 0
+	if s := c.Query("limit"); s != "" {
+		if v, err := strconv.Atoi(s); err == nil {
+			limit = v
+		}
+	}
+	if s := c.Query("offset"); s != "" {
+		if v, err := strconv.Atoi(s); err == nil {
+			offset = v
+		}
+	}
+	return limit, offset
+}
+
+// Create creates a new announcement.
 func (h *AnnouncementHandler) Create(c *gin.Context) {
 	actor, ok := auth.GetActor(c)
 	if !ok {
@@ -47,7 +86,8 @@ func (h *AnnouncementHandler) Create(c *gin.Context) {
 		return
 	}
 
-	if !authz.Authorize(actor.Role, "announcement:create") {
+	// Check authorization
+	if !authz.Authorize(actor.Role, authz.ActionAnnouncementsCreate) {
 		response.Error(c, 403, "forbidden")
 		return
 	}
@@ -58,23 +98,39 @@ func (h *AnnouncementHandler) Create(c *gin.Context) {
 		return
 	}
 
-	a := model.Announcement{
-		Title:     req.Title,
-		Content:   req.Content,
-		Status:    "draft",
-		CreatedBy: actor.UserID,
-	}
-
-	if err := h.repo.Create(&a); err != nil {
+	item, err := h.svc.Create(actor, annsvc.CreateRequest{
+		Title:             req.Title,
+		Content:           req.Content,
+		AudienceType:      req.AudienceType,
+		TargetScope:       mustMarshalJSON(req.TargetScope),
+		Tags:              mustMarshalJSON(req.Tags),
+		AttachmentFileIDs: mustMarshalJSON(req.AttachmentFileIDs),
+		ExternalLinks:     mustMarshalJSON(req.ExternalLinks),
+	})
+	if err != nil {
+		if err == annsvc.ErrInvalidAudienceType {
+			response.Error(c, 400, err.Error())
+			return
+		}
 		response.Error(c, 500, "create failed")
 		return
 	}
-
-	response.OK(c, a)
+	response.OK(c, item)
 }
 
+// List fetches the list of published announcements.
 func (h *AnnouncementHandler) List(c *gin.Context) {
-	list, total, err := h.repo.ListWithTotal("published", 20, 0)
+	actor, ok := auth.GetActor(c)
+	if !ok {
+		response.Error(c, 401, "unauthorized")
+		return
+	}
+	if !authz.Authorize(actor.Role, authz.ActionAnnouncementsList) {
+		response.Error(c, 403, "forbidden")
+		return
+	}
+	limit, offset := parsePagination(c)
+	list, total, err := h.svc.ListForStudent(actor, limit, offset)
 	if err != nil {
 		response.Error(c, 500, "query failed")
 		return
@@ -82,6 +138,165 @@ func (h *AnnouncementHandler) List(c *gin.Context) {
 	response.List(c, list, total)
 }
 
+// GetByID returns one published announcement for student side.
+func (h *AnnouncementHandler) GetByID(c *gin.Context) {
+	actor, ok := auth.GetActor(c)
+	if !ok {
+		response.Error(c, 401, "unauthorized")
+		return
+	}
+	if !authz.Authorize(actor.Role, authz.ActionAnnouncementsGet) {
+		response.Error(c, 403, "forbidden")
+		return
+	}
+	id, ok := parseUintParam(c, "id")
+	if !ok {
+		response.Error(c, 400, "invalid id")
+		return
+	}
+	item, err := h.svc.GetForStudent(actor, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Error(c, 404, "announcement not found")
+			return
+		}
+		response.Error(c, 500, "query failed")
+		return
+	}
+	response.OK(c, item)
+}
+
+// ListAdmin lists announcements for admin side.
+func (h *AnnouncementHandler) ListAdmin(c *gin.Context) {
+	actor, ok := auth.GetActor(c)
+	if !ok {
+		response.Error(c, 401, "unauthorized")
+		return
+	}
+	if !authz.Authorize(actor.Role, authz.ActionAnnouncementsAdminList) {
+		response.Error(c, 403, "forbidden")
+		return
+	}
+	limit, offset := parsePagination(c)
+	list, total, err := h.svc.ListForAdmin(annsvc.ListRequest{
+		Status: c.Query("status"),
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		if errors.Is(err, annsvc.ErrInvalidStatus) {
+			response.Error(c, 400, err.Error())
+			return
+		}
+		response.Error(c, 500, "query failed")
+		return
+	}
+	response.List(c, list, total)
+}
+
+// GetAdmin returns one announcement for admin side.
+func (h *AnnouncementHandler) GetAdmin(c *gin.Context) {
+	actor, ok := auth.GetActor(c)
+	if !ok {
+		response.Error(c, 401, "unauthorized")
+		return
+	}
+	if !authz.Authorize(actor.Role, authz.ActionAnnouncementsAdminGet) {
+		response.Error(c, 403, "forbidden")
+		return
+	}
+	id, ok := parseUintParam(c, "id")
+	if !ok {
+		response.Error(c, 400, "invalid id")
+		return
+	}
+	item, err := h.svc.GetForAdmin(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Error(c, 404, "announcement not found")
+			return
+		}
+		response.Error(c, 500, "query failed")
+		return
+	}
+	response.OK(c, item)
+}
+
+// Patch updates one announcement.
+func (h *AnnouncementHandler) Patch(c *gin.Context) {
+	actor, ok := auth.GetActor(c)
+	if !ok {
+		response.Error(c, 401, "unauthorized")
+		return
+	}
+	if !authz.Authorize(actor.Role, authz.ActionAnnouncementsPatch) {
+		response.Error(c, 403, "forbidden")
+		return
+	}
+	id, ok := parseUintParam(c, "id")
+	if !ok {
+		response.Error(c, 400, "invalid id")
+		return
+	}
+
+	var req PatchAnnouncementReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, 400, "invalid request")
+		return
+	}
+
+	updates := map[string]any{}
+	if req.Title != nil {
+		updates["title"] = strings.TrimSpace(*req.Title)
+	}
+	if req.Content != nil {
+		updates["content"] = strings.TrimSpace(*req.Content)
+	}
+	if req.AudienceType != nil {
+		v := strings.TrimSpace(*req.AudienceType)
+		if v != annsvc.AudienceAll && v != annsvc.AudienceTargeted {
+			response.Error(c, 400, annsvc.ErrInvalidAudienceType.Error())
+			return
+		}
+		updates["audience_type"] = v
+		if v == annsvc.AudienceAll {
+			updates["target_scope"] = mustMarshalJSON(map[string]any{})
+		}
+	}
+	if req.TargetScope != nil {
+		updates["target_scope"] = mustMarshalJSON(*req.TargetScope)
+	}
+	if req.Tags != nil {
+		updates["tags"] = mustMarshalJSON(*req.Tags)
+	}
+	if req.AttachmentFileIDs != nil {
+		updates["attachment_file_ids"] = mustMarshalJSON(*req.AttachmentFileIDs)
+	}
+	if req.ExternalLinks != nil {
+		updates["external_links"] = mustMarshalJSON(*req.ExternalLinks)
+	}
+	if len(updates) == 0 {
+		response.Error(c, 400, "invalid request")
+		return
+	}
+
+	if err := h.svc.Patch(id, updates); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Error(c, 404, "announcement not found")
+			return
+		}
+		response.Error(c, 500, "patch failed")
+		return
+	}
+	item, err := h.svc.GetForAdmin(id)
+	if err != nil {
+		response.Error(c, 500, "query failed")
+		return
+	}
+	response.OK(c, item)
+}
+
+// Publish publishes an announcement.
 func (h *AnnouncementHandler) Publish(c *gin.Context) {
 	actor, ok := auth.GetActor(c)
 	if !ok {
@@ -89,57 +304,80 @@ func (h *AnnouncementHandler) Publish(c *gin.Context) {
 		return
 	}
 
-	if !authz.Authorize(actor.Role, "announcement:publish") {
+	// Check authorization
+	if !authz.Authorize(actor.Role, authz.ActionAnnouncementsPublish) {
 		response.Error(c, 403, "forbidden")
 		return
 	}
 
-	id := parseID(c)
-
-	now := time.Now()
-
-	err := h.repo.UpdateByID(id, map[string]any{
-		"status":       "published",
-		"published_at": now,
+	id, ok := parseUintParam(c, "id")
+	if !ok {
+		response.Error(c, 400, "invalid id")
+		return
+	}
+	var req PublishAnnouncementReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// Keep compatibility: allow empty body.
+		req = PublishAnnouncementReq{}
+	}
+	item, err := h.svc.Publish(c.Request.Context(), id, annsvc.PublishRequest{
+		SendNotification: req.SendNotification,
+		TemplateCode:     req.TemplateCode,
 	})
 	if err != nil {
 		response.Error(c, 500, "publish failed")
 		return
 	}
-
-	a, _ := h.repo.GetByID(id)
-
-	go h.sendNotification(a)
-
-	response.OK(c, gin.H{"ok": true})
+	response.OK(c, gin.H{
+		"id":           item.ID,
+		"status":       item.Status,
+		"published_at": item.PublishedAt,
+	})
 }
 
-func (h *AnnouncementHandler) sendNotification(a *model.Announcement) {
-	var subs []model.UserSubscribe
-
-	h.db.Where("template_code = ? AND status = ?", "announcement_publish", "subscribed").
-		Find(&subs)
-
-	for _, sub := range subs {
-
-		if sub.GrantedCount-sub.ConsumedCount <= 0 {
-			continue
-		}
-
-		err := h.notifSvc.Send(context.Background(), notification.SendRequest{
-			UserID:       sub.UserID,
-			TemplateCode: "announcement_publish",
-			Page:         "/pages/announcement/detail?id=" + strconv.Itoa(int(a.ID)),
-			TemplateData: map[string]interface{}{
-				"thing1": map[string]string{"value": a.Title},
-				"time2":  map[string]string{"value": a.PublishedAt.Format("2006-01-02 15:04")},
-			},
-		})
-
-		if err == nil {
-			h.db.Model(&model.UserSubscribe{}).
-				Where("id = ?", sub.ID).
-				Update("consumed_count", gorm.Expr("consumed_count + 1"))
-		}
+// Archive marks one announcement as archived.
+func (h *AnnouncementHandler) Archive(c *gin.Context) {
+	actor, ok := auth.GetActor(c)
+	if !ok {
+		response.Error(c, 401, "unauthorized")
+		return
 	}
+	if !authz.Authorize(actor.Role, authz.ActionAnnouncementsArchive) {
+		response.Error(c, 403, "forbidden")
+		return
+	}
+	id, ok := parseUintParam(c, "id")
+	if !ok {
+		response.Error(c, 400, "invalid id")
+		return
+	}
+	if err := h.svc.Archive(id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Error(c, 404, "announcement not found")
+			return
+		}
+		response.Error(c, 500, "archive failed")
+		return
+	}
+	item, err := h.svc.GetForAdmin(id)
+	if err != nil {
+		response.Error(c, 500, "query failed")
+		return
+	}
+	response.OK(c, gin.H{
+		"id":         item.ID,
+		"status":     item.Status,
+		"updated_at": item.UpdatedAt,
+	})
+}
+
+func mustMarshalJSON(v any) []byte {
+	if v == nil {
+		return nil
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	return b
 }
