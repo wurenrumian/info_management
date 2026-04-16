@@ -16,7 +16,7 @@ const (
 	DefaultDevGrade        string = "2020"
 	DefaultDevMajor        string = "信息管理"
 	DefaultPublicClassID   uint   = 9999
-	DefaultPublicClassName = "unbound_class"
+	DefaultPublicClassName        = "unbound_class"
 )
 
 func DatabaseDSN() string {
