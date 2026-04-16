@@ -12,7 +12,9 @@ func Authorize(role int, action string) bool {
 			action == ActionNotifUnreadGet ||
 			action == ActionFilesUpload ||
 			action == ActionFilesGet ||
-			action == ActionFilesList
+			action == ActionFilesList ||
+			action == ActionAnnouncementsList ||
+			action == ActionAnnouncementsGet
 	case model.RoleCadre:
 		return action == ActionUsersList ||
 			action == ActionUsersGet ||
@@ -29,7 +31,15 @@ func Authorize(role int, action string) bool {
 			action == ActionClassesGet ||
 			action == ActionFilesUpload ||
 			action == ActionFilesGet ||
-			action == ActionFilesList
+			action == ActionFilesList ||
+			action == ActionAnnouncementsList ||
+			action == ActionAnnouncementsGet ||
+			action == ActionAnnouncementsAdminList ||
+			action == ActionAnnouncementsAdminGet ||
+			action == ActionAnnouncementsCreate ||
+			action == ActionAnnouncementsPatch ||
+			action == ActionAnnouncementsPublish ||
+			action == ActionAnnouncementsArchive
 	case model.RoleTeacher:
 		return action == ActionUsersList ||
 			action == ActionUsersGet ||
@@ -47,7 +57,15 @@ func Authorize(role int, action string) bool {
 			action == ActionClassesGet ||
 			action == ActionFilesUpload ||
 			action == ActionFilesGet ||
-			action == ActionFilesList
+			action == ActionFilesList ||
+			action == ActionAnnouncementsList ||
+			action == ActionAnnouncementsGet ||
+			action == ActionAnnouncementsAdminList ||
+			action == ActionAnnouncementsAdminGet ||
+			action == ActionAnnouncementsCreate ||
+			action == ActionAnnouncementsPatch ||
+			action == ActionAnnouncementsPublish ||
+			action == ActionAnnouncementsArchive
 	case model.RoleSuperAdmin:
 		return true
 	default:

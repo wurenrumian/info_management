@@ -53,6 +53,7 @@ func New(db *gorm.DB) *gin.Engine {
 	api.GET("/knowledge/search", knowledgeHandler.Search)
 	api.GET("/knowledge/:id", knowledgeHandler.GetByID)
 	api.GET("/announcements", announcementHandler.List)
+	api.GET("/announcements/:id", announcementHandler.GetByID)
 
 	// File APIs
 	api.POST("/files/upload", fileHandler.Upload)
@@ -94,8 +95,12 @@ func New(db *gorm.DB) *gin.Engine {
 	admin.GET("/notification/templates/:code", notifHandler.GetTemplate)
 	admin.GET("/notification/logs", notifHandler.ListLogs)
 	api.GET("/notifications/unread/count", notifHandler.UnreadCount)
+	admin.GET("/announcements", announcementHandler.ListAdmin)
+	admin.GET("/announcements/:id", announcementHandler.GetAdmin)
 	admin.POST("/announcements", announcementHandler.Create)
+	admin.PATCH("/announcements/:id", announcementHandler.Patch)
 	admin.POST("/announcements/:id/publish", announcementHandler.Publish)
+	admin.POST("/announcements/:id/archive", announcementHandler.Archive)
 
 	return r
 }
