@@ -24,7 +24,7 @@ type Announcement struct {
 	AttachmentFileIDs datatypes.JSON `gorm:"type:jsonb" json:"attachment_file_ids"`
 	ExternalLinks     datatypes.JSON `gorm:"type:jsonb" json:"external_links"`
 
-	AuthorID uint       `gorm:"index;not null" json:"author_id"`
+	AuthorID    uint       `gorm:"index;not null" json:"author_id"`
 	PublishedAt *time.Time `json:"published_at"`
 
 	CreatedAt time.Time `json:"created_at"`

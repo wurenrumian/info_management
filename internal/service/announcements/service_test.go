@@ -1,7 +1,10 @@
 package announcements
 
 import (
+	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
@@ -108,4 +111,103 @@ func TestListForStudentFiltersPublishedAndCrossScope(t *testing.T) {
 	require.False(t, gotTitles["跨年级不命中"])
 	require.False(t, gotTitles["跨班级不命中"])
 	require.False(t, gotTitles["草稿不应返回"])
+}
+
+func TestMatchAudienceAll(t *testing.T) {
+	ok, err := matchAnnouncementForActor(model.Announcement{
+		AudienceType: AudienceAll,
+	}, auth.Actor{
+		UserID:  100,
+		Role:    model.RoleStudent,
+		ClassID: 1,
+		Grade:   "2023",
+	}, "信息管理")
+	require.NoError(t, err)
+	require.True(t, ok)
+}
+
+func TestMatchAudienceTargetedGrades(t *testing.T) {
+	ok, err := matchAnnouncementForActor(model.Announcement{
+		AudienceType: AudienceTargeted,
+		TargetScope:  datatypes.JSON(`{"grades":["2023"]}`),
+	}, auth.Actor{
+		UserID:  100,
+		Role:    model.RoleStudent,
+		ClassID: 1,
+		Grade:   "2023",
+	}, "信息管理")
+	require.NoError(t, err)
+	require.True(t, ok)
+}
+
+func TestMatchAudienceTargetedMajors(t *testing.T) {
+	ok, err := matchAnnouncementForActor(model.Announcement{
+		AudienceType: AudienceTargeted,
+		TargetScope:  datatypes.JSON(`{"majors":["信息管理"]}`),
+	}, auth.Actor{
+		UserID:  100,
+		Role:    model.RoleStudent,
+		ClassID: 1,
+		Grade:   "2023",
+	}, "信息管理")
+	require.NoError(t, err)
+	require.True(t, ok)
+}
+
+func TestMatchAudienceTargetedClassIDs(t *testing.T) {
+	ok, err := matchAnnouncementForActor(model.Announcement{
+		AudienceType: AudienceTargeted,
+		TargetScope:  datatypes.JSON(`{"class_ids":[1]}`),
+	}, auth.Actor{
+		UserID:  100,
+		Role:    model.RoleStudent,
+		ClassID: 1,
+		Grade:   "2023",
+	}, "信息管理")
+	require.NoError(t, err)
+	require.True(t, ok)
+}
+
+func TestPublishSetsPublishedAt(t *testing.T) {
+	db, svc := setupAnnouncementService(t)
+
+	item := model.Announcement{
+		Title:        "待发布公告",
+		Content:      "正文",
+		Status:       StatusDraft,
+		AudienceType: AudienceAll,
+		TargetScope:  datatypes.JSON(`{}`),
+		AuthorID:     900,
+	}
+	require.NoError(t, db.Create(&item).Error)
+
+	before := time.Now()
+	got, err := svc.Publish(context.Background(), item.ID, PublishRequest{})
+	require.NoError(t, err)
+	require.Equal(t, StatusPublished, got.Status)
+	require.NotNil(t, got.PublishedAt)
+	require.False(t, got.PublishedAt.Before(before))
+
+	var stored model.Announcement
+	require.NoError(t, db.First(&stored, item.ID).Error)
+	require.Equal(t, StatusPublished, stored.Status)
+	require.NotNil(t, stored.PublishedAt)
+}
+
+func TestArchiveStatusCannotBePublished(t *testing.T) {
+	db, svc := setupAnnouncementService(t)
+
+	item := model.Announcement{
+		Title:        "已归档公告",
+		Content:      "正文",
+		Status:       StatusArchived,
+		AudienceType: AudienceAll,
+		TargetScope:  datatypes.JSON(`{}`),
+		AuthorID:     900,
+	}
+	require.NoError(t, db.Create(&item).Error)
+
+	_, err := svc.Publish(context.Background(), item.ID, PublishRequest{})
+	require.Error(t, err)
+	require.True(t, errors.Is(err, ErrAnnouncementState))
 }

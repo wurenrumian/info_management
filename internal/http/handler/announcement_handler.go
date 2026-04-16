@@ -8,7 +8,9 @@ import (
 
 	"manage/internal/auth"
 	"manage/internal/http/response"
+	"manage/internal/repo"
 	annsvc "manage/internal/service/announcements"
+	"manage/internal/service/audit"
 	"manage/internal/service/authz"
 	"manage/internal/service/notification"
 
@@ -18,13 +20,15 @@ import (
 
 // AnnouncementHandler handles announcement related HTTP requests.
 type AnnouncementHandler struct {
-	svc *annsvc.Service
+	svc         *annsvc.Service
+	auditLogger *audit.Logger
 }
 
 // NewAnnouncementHandler creates a new AnnouncementHandler.
 func NewAnnouncementHandler(db *gorm.DB, notifSvc *notification.Service) *AnnouncementHandler {
 	return &AnnouncementHandler{
-		svc: annsvc.NewService(db, notifSvc),
+		svc:         annsvc.NewService(db, notifSvc),
+		auditLogger: audit.NewLogger(repo.NewAdminLogRepo(db)),
 	}
 }
 
@@ -115,6 +119,7 @@ func (h *AnnouncementHandler) Create(c *gin.Context) {
 		response.Error(c, 500, "create failed")
 		return
 	}
+	h.auditLogger.Log(c, actor, "announcements.create", "announcement", item.ID)
 	response.OK(c, item)
 }
 
@@ -293,6 +298,7 @@ func (h *AnnouncementHandler) Patch(c *gin.Context) {
 		response.Error(c, 500, "query failed")
 		return
 	}
+	h.auditLogger.Log(c, actor, "announcements.patch", "announcement", id)
 	response.OK(c, item)
 }
 
@@ -328,6 +334,7 @@ func (h *AnnouncementHandler) Publish(c *gin.Context) {
 		response.Error(c, 500, "publish failed")
 		return
 	}
+	h.auditLogger.Log(c, actor, "announcements.publish", "announcement", item.ID)
 	response.OK(c, gin.H{
 		"id":           item.ID,
 		"status":       item.Status,
@@ -364,6 +371,7 @@ func (h *AnnouncementHandler) Archive(c *gin.Context) {
 		response.Error(c, 500, "query failed")
 		return
 	}
+	h.auditLogger.Log(c, actor, "announcements.archive", "announcement", id)
 	response.OK(c, gin.H{
 		"id":         item.ID,
 		"status":     item.Status,
