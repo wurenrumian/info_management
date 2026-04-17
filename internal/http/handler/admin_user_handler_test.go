@@ -1,8 +1,11 @@
 package handler_test
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -122,4 +125,148 @@ func TestPatchUserClassIDSyncsGrade(t *testing.T) {
 	require.NoError(t, db.First(&user, 100).Error)
 	require.Equal(t, uint(3), user.ClassID)
 	require.Equal(t, "2025", user.Grade)
+}
+
+func TestImportUsersOnlySuperAdmin(t *testing.T) {
+	db := setupTestRouter(t)
+	r := router.New(db)
+
+	body := []byte(`{"users":[{"student_id":"S200","name":"u200","class_id":1}]}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/users/import", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	token := testutil.GenerateTestToken(200, model.RoleTeacher, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func TestImportUsersJSONSupportsPartialFailure(t *testing.T) {
+	db := setupTestRouter(t)
+	r := router.New(db)
+
+	body := []byte(`{
+		"users":[
+			{"student_id":"S200","name":"u200","class_id":1,"role":1},
+			{"student_id":"S100","name":"dup","class_id":1,"role":1},
+			{"student_id":"S201","name":"bad-class","class_id":99999}
+		]
+	}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/users/import", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	token := testutil.GenerateTestToken(999, model.RoleSuperAdmin, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), `"imported":1`)
+	require.Contains(t, w.Body.String(), `"failed":2`)
+	require.Contains(t, w.Body.String(), "duplicate student_id")
+	require.Contains(t, w.Body.String(), "class not found")
+
+	var user model.User
+	require.NoError(t, db.Where("student_id = ?", "S200").First(&user).Error)
+	require.Equal(t, "2023", user.Grade)
+}
+
+func TestImportUsersCSV(t *testing.T) {
+	db := setupTestRouter(t)
+	r := router.New(db)
+
+	csv := "student_id,name,class_id,role,major,college,enrollment_year\nS210,u210,1,1,CS,Info,2023\n"
+	req := buildImportFileRequest(t, "/api/v1/admin/users/import", "users.csv", []byte(csv))
+	token := testutil.GenerateTestToken(999, model.RoleSuperAdmin, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), `"imported":1`)
+	require.Contains(t, w.Body.String(), `"failed":0`)
+}
+
+func TestImportUsersXLSX(t *testing.T) {
+	db := setupTestRouter(t)
+	r := router.New(db)
+
+	xlsx := buildUsersXLSX(t, [][]string{
+		{"student_id", "name", "class_id", "role", "major", "college", "enrollment_year"},
+		{"S220", "u220", "1", "1", "CS", "Info", "2023"},
+	})
+	req := buildImportFileRequest(t, "/api/v1/admin/users/import", "users.xlsx", xlsx)
+	token := testutil.GenerateTestToken(999, model.RoleSuperAdmin, 1, "2023")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), `"imported":1`)
+	require.Contains(t, w.Body.String(), `"failed":0`)
+}
+
+func buildImportFileRequest(t *testing.T, path, filename string, content []byte) *http.Request {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	fileWriter, err := writer.CreateFormFile("file", filename)
+	require.NoError(t, err)
+	_, err = fileWriter.Write(content)
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	req := httptest.NewRequest(http.MethodPost, path, &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	return req
+}
+
+func buildUsersXLSX(t *testing.T, rows [][]string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+
+	addFile := func(name, content string) {
+		w, err := zw.Create(name)
+		require.NoError(t, err)
+		_, err = w.Write([]byte(content))
+		require.NoError(t, err)
+	}
+
+	addFile("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>`)
+	addFile("_rels/.rels", `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`)
+	addFile("xl/workbook.xml", `<?xml version="1.0" encoding="UTF-8"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets>
+</workbook>`)
+	addFile("xl/_rels/workbook.xml.rels", `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>`)
+
+	var sheet bytes.Buffer
+	sheet.WriteString(`<?xml version="1.0" encoding="UTF-8"?>`)
+	sheet.WriteString(`<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>`)
+	for rIdx, row := range rows {
+		sheet.WriteString(fmt.Sprintf(`<row r="%d">`, rIdx+1))
+		for cIdx, cell := range row {
+			col := string(rune('A' + cIdx))
+			sheet.WriteString(fmt.Sprintf(`<c r="%s%d" t="inlineStr"><is><t>%s</t></is></c>`, col, rIdx+1, cell))
+		}
+		sheet.WriteString(`</row>`)
+	}
+	sheet.WriteString(`</sheetData></worksheet>`)
+	addFile("xl/worksheets/sheet1.xml", sheet.String())
+
+	require.NoError(t, zw.Close())
+	return buf.Bytes()
 }

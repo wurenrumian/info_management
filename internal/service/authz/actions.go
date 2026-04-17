@@ -13,6 +13,7 @@ const (
 	ActionUsersList              = "users:list"
 	ActionUsersGet               = "users:get"
 	ActionUsersPatch             = "users:patch"
+	ActionUsersImport            = "users:import"
 	ActionClassesList            = "classes:list"
 	ActionClassesGet             = "classes:get"
 	ActionClassesCreate          = "classes:create"
