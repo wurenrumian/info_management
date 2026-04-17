@@ -35,6 +35,7 @@ func setupAnnouncementHandlerRouter(t *testing.T) (*gorm.DB, http.Handler) {
 	require.NoError(t, db.Create(&model.Class{ID: 2, ClassName: "计科2班", Grade: "2022", Major: "计算机"}).Error)
 	require.NoError(t, db.Create(&model.User{ID: 100, StudentID: "S100", Name: "张三", Role: model.RoleStudent, ClassID: 1, Grade: "2023", Major: "信息管理"}).Error)
 	require.NoError(t, db.Create(&model.User{ID: 101, StudentID: "S101", Name: "李四", Role: model.RoleStudent, ClassID: 2, Grade: "2022", Major: "计算机"}).Error)
+	require.NoError(t, db.Create(&model.User{ID: 200, StudentID: "T200", Name: "老师", Role: model.RoleTeacher, ClassID: 1, Grade: "2023", Major: "信息管理"}).Error)
 	require.NoError(t, db.Create(&model.User{ID: 999, StudentID: "A999", Name: "管理员", Role: model.RoleSuperAdmin, ClassID: 1, Grade: "2023"}).Error)
 
 	return db, router.New(db)
@@ -252,4 +253,196 @@ func TestStudentListReturnsOnlyPublished(t *testing.T) {
 	require.Equal(t, int64(1), resp.Total)
 	require.Len(t, resp.Data, 1)
 	require.Equal(t, "学生可见已发布", resp.Data[0].Title)
+}
+
+func TestStudentListFiltersByTargetScopeGrade(t *testing.T) {
+	db, r := setupAnnouncementHandlerRouter(t)
+	require.NoError(t, db.Create(&model.Class{ID: 3, ClassName: "软工3班", Grade: "2024", Major: "软件工程"}).Error)
+	require.NoError(t, db.Create(&model.User{
+		ID:        102,
+		StudentID: "S102",
+		Name:      "王五",
+		Role:      model.RoleStudent,
+		ClassID:   3,
+		Grade:     "2024",
+		Major:     "软件工程",
+	}).Error)
+
+	rows := []model.Announcement{
+		{
+			Title:        "仅2024级可见",
+			Content:      "正文",
+			Status:       "published",
+			AudienceType: "targeted",
+			TargetScope:  datatypes.JSON(`{"grades":["2024"]}`),
+			AuthorID:     999,
+		},
+		{
+			Title:        "全员公告",
+			Content:      "正文",
+			Status:       "published",
+			AudienceType: "all",
+			TargetScope:  datatypes.JSON(`{}`),
+			AuthorID:     999,
+		},
+	}
+	require.NoError(t, db.Create(&rows).Error)
+
+	req2022 := httptest.NewRequest(http.MethodGet, "/api/v1/announcements?limit=20&offset=0", nil)
+	req2022.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(101, model.RoleStudent, 2, "2022"))
+	w2022 := httptest.NewRecorder()
+	r.ServeHTTP(w2022, req2022)
+	require.Equal(t, http.StatusOK, w2022.Code)
+	require.NotContains(t, w2022.Body.String(), "仅2024级可见")
+	require.Contains(t, w2022.Body.String(), "全员公告")
+
+	req2024 := httptest.NewRequest(http.MethodGet, "/api/v1/announcements?limit=20&offset=0", nil)
+	req2024.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(102, model.RoleStudent, 3, "2024"))
+	w2024 := httptest.NewRecorder()
+	r.ServeHTTP(w2024, req2024)
+	require.Equal(t, http.StatusOK, w2024.Code)
+	require.Contains(t, w2024.Body.String(), "仅2024级可见")
+	require.Contains(t, w2024.Body.String(), "全员公告")
+}
+
+func TestListAllPublishedAllowsTeacherAndIgnoresTargetScope(t *testing.T) {
+	db, r := setupAnnouncementHandlerRouter(t)
+	rows := []model.Announcement{
+		{
+			Title:        "仅2024级可见",
+			Content:      "正文",
+			Status:       "published",
+			AudienceType: "targeted",
+			TargetScope:  datatypes.JSON(`{"grades":["2024"]}`),
+			AuthorID:     999,
+		},
+		{
+			Title:        "全员已发布",
+			Content:      "正文",
+			Status:       "published",
+			AudienceType: "all",
+			TargetScope:  datatypes.JSON(`{}`),
+			AuthorID:     999,
+		},
+		{
+			Title:        "草稿不应返回",
+			Content:      "正文",
+			Status:       "draft",
+			AudienceType: "all",
+			TargetScope:  datatypes.JSON(`{}`),
+			AuthorID:     999,
+		},
+	}
+	require.NoError(t, db.Create(&rows).Error)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/announcements/all?limit=20&offset=0", nil)
+	req.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(200, model.RoleTeacher, 1, "2023"))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), "仅2024级可见")
+	require.Contains(t, w.Body.String(), "全员已发布")
+	require.NotContains(t, w.Body.String(), "草稿不应返回")
+}
+
+func TestListAllPublishedForbiddenForStudent(t *testing.T) {
+	db, r := setupAnnouncementHandlerRouter(t)
+	require.NoError(t, db.Create(&model.Announcement{
+		Title:        "全员已发布",
+		Content:      "正文",
+		Status:       "published",
+		AudienceType: "all",
+		TargetScope:  datatypes.JSON(`{}`),
+		AuthorID:     999,
+	}).Error)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/announcements/all?limit=20&offset=0", nil)
+	req.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(100, model.RoleStudent, 1, "2023"))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusForbidden, w.Code)
+	require.Contains(t, w.Body.String(), "forbidden")
+}
+
+func TestGetAllPublishedByIDAllowsTeacherAndReturnsContent(t *testing.T) {
+	db, r := setupAnnouncementHandlerRouter(t)
+	item := model.Announcement{
+		Title:        "仅2024级可见",
+		Content:      "这是定向公告完整正文",
+		Status:       "published",
+		AudienceType: "targeted",
+		TargetScope:  datatypes.JSON(`{"grades":["2024"]}`),
+		AuthorID:     999,
+	}
+	require.NoError(t, db.Create(&item).Error)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/announcements/all/1", nil)
+	req.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(200, model.RoleTeacher, 1, "2023"))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), "仅2024级可见")
+	require.Contains(t, w.Body.String(), "这是定向公告完整正文")
+}
+
+func TestGetAllPublishedByIDForbiddenForStudent(t *testing.T) {
+	db, r := setupAnnouncementHandlerRouter(t)
+	require.NoError(t, db.Create(&model.Announcement{
+		Title:        "全员已发布",
+		Content:      "正文",
+		Status:       "published",
+		AudienceType: "all",
+		TargetScope:  datatypes.JSON(`{}`),
+		AuthorID:     999,
+	}).Error)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/announcements/all/1", nil)
+	req.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(100, model.RoleStudent, 1, "2023"))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusForbidden, w.Code)
+	require.Contains(t, w.Body.String(), "forbidden")
+}
+
+func TestPublishAnnouncementReturnsNotificationSummary(t *testing.T) {
+	db, r := setupAnnouncementHandlerRouter(t)
+	item := model.Announcement{
+		Title:        "待发布公告",
+		Content:      "正文",
+		Status:       "draft",
+		AudienceType: "all",
+		TargetScope:  datatypes.JSON(`{}`),
+		AuthorID:     999,
+	}
+	require.NoError(t, db.Create(&item).Error)
+
+	require.NoError(t, db.Create(&model.NotificationTemplate{
+		Code:             "announcement",
+		WechatTemplateID: "tmpl_announcement",
+		Name:             "公告通知",
+	}).Error)
+	require.NoError(t, db.Create(&model.UserSubscribe{
+		UserID:           100,
+		TemplateCode:     "announcement",
+		WechatTemplateID: "tmpl_announcement",
+		Status:           "subscribed",
+		GrantedCount:     1,
+		ConsumedCount:    0,
+	}).Error)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/announcements/1/publish", bytes.NewReader([]byte(`{"send_notification":true}`)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(999, model.RoleSuperAdmin, 1, "2023"))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), `"notification_summary"`)
+	require.Contains(t, w.Body.String(), `"attempted"`)
+	require.Contains(t, w.Body.String(), `"sent"`)
+	require.Contains(t, w.Body.String(), `"failed"`)
 }

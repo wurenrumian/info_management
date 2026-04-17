@@ -1,10 +1,14 @@
 package model
 
 import (
+	"strings"
 	"time"
 
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 )
+
+const DefaultUserGrade = "2024"
 
 // User represents one user account in the system.
 type User struct {
@@ -15,7 +19,7 @@ type User struct {
 	PasswordHash   *string        `gorm:"type:varchar(255)" json:"-"`
 	Role           int            `gorm:"not null;index" json:"role"`
 	ClassID        uint           `gorm:"index" json:"class_id"`
-	Grade          string         `gorm:"type:varchar(10);index" json:"grade"`
+	Grade          string         `gorm:"type:varchar(10);not null;default:'2024';index" json:"grade"`
 	Major          string         `gorm:"type:varchar(100)" json:"major"`
 	College        string         `gorm:"type:varchar(100)" json:"college"`
 	EnrollmentYear int            `gorm:"index" json:"enrollment_year"`
@@ -24,4 +28,12 @@ type User struct {
 	Class          Class          `gorm:"foreignKey:ClassID" json:"class"`
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
+}
+
+// BeforeCreate keeps grade required with a stable default for new users.
+func (u *User) BeforeCreate(_ *gorm.DB) error {
+	if strings.TrimSpace(u.Grade) == "" {
+		u.Grade = DefaultUserGrade
+	}
+	return nil
 }

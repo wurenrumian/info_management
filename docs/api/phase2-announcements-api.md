@@ -11,6 +11,8 @@
 ## Student Endpoints
 
 - `GET /api/v1/announcements?limit=20&offset=0`
+- `GET /api/v1/announcements/all?limit=20&offset=0`（仅 `role > 2`）
+- `GET /api/v1/announcements/all/:id`（仅 `role > 2`）
 - `GET /api/v1/announcements/:id`
 
 ### GET /api/v1/announcements
@@ -31,6 +33,10 @@
   "total": 1
 }
 ```
+
+筛选规则说明：
+- 当 `audience_type=targeted` 且 `target_scope.grades` 非空时，学生端按用户所属班级的 `classes.grade` 进行匹配。
+- `users.grade` 是系统维护快照字段，不作为公告年级筛选的一手事实来源。
 
 ### GET /api/v1/announcements/:id
 
@@ -60,6 +66,57 @@
 }
 ```
 
+### GET /api/v1/announcements/all
+
+说明：
+- 仅教师/超级管理员可访问（`role > 2`）。
+- 返回所有 `published` 公告，不应用 `target_scope` 的年级/专业/班级筛选。
+
+成功响应：
+
+```json
+{
+  "data": [
+    {
+      "id": 2,
+      "title": "仅2024级可见",
+      "status": "published",
+      "audience_type": "targeted"
+    },
+    {
+      "id": 1,
+      "title": "全员公告",
+      "status": "published",
+      "audience_type": "all"
+    }
+  ],
+  "total": 2
+}
+```
+
+### GET /api/v1/announcements/all/:id
+
+说明：
+- 仅教师/超级管理员可访问（`role > 2`）。
+- 返回单条 `published` 公告完整内容，不应用 `target_scope` 筛选。
+
+成功响应：
+
+```json
+{
+  "data": {
+    "id": 2,
+    "title": "仅2024级可见",
+    "content": "这是定向公告完整正文",
+    "status": "published",
+    "audience_type": "targeted",
+    "target_scope": {
+      "grades": ["2024"]
+    }
+  }
+}
+```
+
 ## Admin Endpoints
 
 - `GET /api/v1/admin/announcements?status=draft&limit=20&offset=0`
@@ -83,7 +140,10 @@
   "audience_type": "targeted",
   "target_scope": {
     "grades": ["2023"],
-    "majors": ["信息管理"]
+    "majors": ["信息管理"],
+    "class_ids": [1],
+    "roles": [2],
+    "student_ids": ["S1001", "S1002"]
   },
   "tags": ["假期", "安全"],
   "attachment_file_ids": [21],
@@ -115,7 +175,7 @@
 ```json
 {
   "send_notification": true,
-  "template_code": "announcement_publish"
+  "template_code": "announcement"
 }
 ```
 
@@ -172,4 +232,3 @@
 - `announcements.patch`
 - `announcements.publish`
 - `announcements.archive`
-

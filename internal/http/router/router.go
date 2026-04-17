@@ -53,6 +53,8 @@ func New(db *gorm.DB) *gin.Engine {
 	api.GET("/knowledge/search", knowledgeHandler.Search)
 	api.GET("/knowledge/:id", knowledgeHandler.GetByID)
 	api.GET("/announcements", announcementHandler.List)
+	api.GET("/announcements/all", announcementHandler.ListAllPublished)
+	api.GET("/announcements/all/:id", announcementHandler.GetAllPublishedByID)
 	api.GET("/announcements/:id", announcementHandler.GetByID)
 
 	// File APIs
