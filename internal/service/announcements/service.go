@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,11 +41,11 @@ type Service struct {
 }
 
 type TargetScope struct {
-	Grades   []string `json:"grades"`
-	Majors   []string `json:"majors"`
-	ClassIDs []uint   `json:"class_ids"`
-	Roles    []int    `json:"roles"`
-	UserIDs  []uint   `json:"user_ids"`
+	Grades     []json.RawMessage `json:"grades"`
+	Majors     []json.RawMessage `json:"majors"`
+	ClassIDs   []uint            `json:"class_ids"`
+	Roles      []int             `json:"roles"`
+	StudentIDs []json.RawMessage `json:"student_ids"`
 }
 
 type CreateRequest struct {
@@ -66,6 +67,19 @@ type ListRequest struct {
 type PublishRequest struct {
 	SendNotification bool
 	TemplateCode     string
+}
+
+type NotificationFailure struct {
+	UserID uint   `json:"user_id"`
+	Error  string `json:"error"`
+}
+
+type PublishNotificationSummary struct {
+	Attempted  int                   `json:"attempted"`
+	Sent       int                   `json:"sent"`
+	Failed     int                   `json:"failed"`
+	FirstError string                `json:"first_error,omitempty"`
+	Failures   []NotificationFailure `json:"failures,omitempty"`
 }
 
 func NewService(db *gorm.DB, notifSvc *notification.Service) *Service {
@@ -114,10 +128,20 @@ func (s *Service) ListForStudent(actor auth.Actor, limit, offset int) ([]model.A
 		return nil, 0, err
 	}
 
+	// Get fresh user data from database to ensure accurate grade, major, and student_id
+	actorGrade, err := s.getActorGrade(actor.UserID)
+	if err != nil {
+		return nil, 0, err
+	}
+	actor.Grade = actorGrade
+
 	actorMajor, err := s.getActorMajor(actor.UserID)
 	if err != nil {
 		return nil, 0, err
 	}
+
+	actorStudentID, _ := s.getActorStudentID(actor.UserID)
+	actor.StudentID = actorStudentID
 
 	filtered := make([]model.Announcement, 0, len(all))
 	for _, item := range all {
@@ -142,6 +166,25 @@ func (s *Service) ListForStudent(actor auth.Actor, limit, offset int) ([]model.A
 	return filtered[offset:end], total, nil
 }
 
+// ListAllPublished returns all published announcements without audience scope filtering.
+// It is intended for privileged roles (teacher/super admin) that need full visibility.
+func (s *Service) ListAllPublished(limit, offset int) ([]model.Announcement, int64, error) {
+	return s.repo.ListWithTotal(StatusPublished, limit, offset)
+}
+
+// GetAllPublishedByID returns one published announcement without audience scope filtering.
+// It is intended for privileged roles (teacher/super admin) that need full visibility.
+func (s *Service) GetAllPublishedByID(id uint) (*model.Announcement, error) {
+	item, err := s.repo.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if item.Status != StatusPublished {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return item, nil
+}
+
 func (s *Service) GetForStudent(actor auth.Actor, id uint) (*model.Announcement, error) {
 	item, err := s.repo.GetByID(id)
 	if err != nil {
@@ -150,10 +193,19 @@ func (s *Service) GetForStudent(actor auth.Actor, id uint) (*model.Announcement,
 	if item.Status != StatusPublished {
 		return nil, gorm.ErrRecordNotFound
 	}
+	// Get fresh user data from database to ensure accurate grade, major, and student_id
+	actorGrade, err := s.getActorGrade(actor.UserID)
+	if err != nil {
+		return nil, err
+	}
+	actor.Grade = actorGrade
+
 	actorMajor, err := s.getActorMajor(actor.UserID)
 	if err != nil {
 		return nil, err
 	}
+	actorStudentID, _ := s.getActorStudentID(actor.UserID)
+	actor.StudentID = actorStudentID
 	ok, err := matchAnnouncementForActor(*item, actor, actorMajor)
 	if err != nil {
 		return nil, err
@@ -180,45 +232,64 @@ func (s *Service) Patch(id uint, updates map[string]any) error {
 	return s.repo.Patch(id, updates)
 }
 
-func (s *Service) Publish(ctx context.Context, id uint, req PublishRequest) (*model.Announcement, error) {
+func (s *Service) Publish(ctx context.Context, id uint, req PublishRequest) (*model.Announcement, *PublishNotificationSummary, error) {
 	item, err := s.repo.GetByID(id)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if item.Status == StatusArchived {
-		return nil, fmt.Errorf("%w: archived item can not be published", ErrAnnouncementState)
+		return nil, nil, fmt.Errorf("%w: archived item can not be published", ErrAnnouncementState)
 	}
 
 	now := time.Now()
 	if err := s.repo.Publish(id, now); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	item.Status = StatusPublished
 	item.PublishedAt = &now
 
+	var summary *PublishNotificationSummary
+
 	if req.SendNotification && s.notifSvc != nil {
 		templateCode := strings.TrimSpace(req.TemplateCode)
 		if templateCode == "" {
-			templateCode = "announcement_publish"
+			templateCode = "announcement"
 		}
 		userIDs, err := s.pickRecipients(*item)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
+		}
+		summary = &PublishNotificationSummary{
+			Attempted: len(userIDs),
 		}
 		for _, userID := range userIDs {
-			_ = s.notifSvc.Send(ctx, notification.SendRequest{
+			err := s.notifSvc.Send(ctx, notification.SendRequest{
 				UserID:       userID,
 				TemplateCode: templateCode,
 				Page:         "/pages/announcement/detail?id=" + fmt.Sprintf("%d", item.ID),
 				TemplateData: map[string]interface{}{
-					"thing1": map[string]string{"value": item.Title},
-					"time2":  map[string]string{"value": now.Format("2006-01-02 15:04")},
+					"thing1": map[string]string{"value": truncateString(item.Content, 20)},
+					"time3":  map[string]string{"value": now.Format("2006-01-02 15:04")},
+					"thing4": map[string]string{"value": truncateString(item.Title, 20)},
 				},
 			})
+			if err != nil {
+				errMsg := err.Error()
+				if summary.FirstError == "" {
+					summary.FirstError = errMsg
+				}
+				summary.Failures = append(summary.Failures, NotificationFailure{
+					UserID: userID,
+					Error:  errMsg,
+				})
+				continue
+			}
+			summary.Sent++
 		}
+		summary.Failed = len(summary.Failures)
 	}
 
-	return item, nil
+	return item, summary, nil
 }
 
 func (s *Service) Archive(id uint) error {
@@ -237,6 +308,27 @@ func (s *Service) getActorMajor(userID uint) (string, error) {
 	return major, nil
 }
 
+func (s *Service) getActorGrade(userID uint) (string, error) {
+	u, err := s.userRepo.GetByIDInScope(authz.Scope{AllowAll: true}, userID)
+	if err != nil {
+		return "", err
+	}
+	// Use class.grade as the authoritative source per grade governance spec
+	grade := strings.TrimSpace(u.Class.Grade)
+	if grade == "" {
+		grade = strings.TrimSpace(u.Grade)
+	}
+	return grade, nil
+}
+
+func (s *Service) getActorStudentID(userID uint) (string, error) {
+	u, err := s.userRepo.GetByIDInScope(authz.Scope{AllowAll: true}, userID)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(u.StudentID), nil
+}
+
 func (s *Service) pickRecipients(item model.Announcement) ([]uint, error) {
 	users, _, err := s.userRepo.ListByScopeWithTotal(authz.Scope{AllowAll: true}, 10000, 0)
 	if err != nil {
@@ -250,10 +342,11 @@ func (s *Service) pickRecipients(item model.Announcement) ([]uint, error) {
 			major = strings.TrimSpace(u.Class.Major)
 		}
 		actor := auth.Actor{
-			UserID:  u.ID,
-			Role:    u.Role,
-			ClassID: u.ClassID,
-			Grade:   u.Grade,
+			UserID:    u.ID,
+			StudentID: u.StudentID,
+			Role:      u.Role,
+			ClassID:   u.ClassID,
+			Grade:     u.Grade,
 		}
 		ok, err := matchAnnouncementForActor(item, actor, major)
 		if err != nil {
@@ -295,11 +388,65 @@ func parseTargetScope(raw []byte) (TargetScope, error) {
 }
 
 func matchTargetScope(actor auth.Actor, major string, scope TargetScope) bool {
-	return containsString(scope.Grades, actor.Grade) &&
-		containsString(scope.Majors, strings.TrimSpace(major)) &&
+	return containsStringValue(scope.Grades, actor.Grade) &&
+		containsStringValue(scope.Majors, strings.TrimSpace(major)) &&
 		containsUint(scope.ClassIDs, actor.ClassID) &&
 		containsInt(scope.Roles, actor.Role) &&
-		containsUint(scope.UserIDs, actor.UserID)
+		containsStudentID(scope.StudentIDs, actor.StudentID)
+}
+
+// containsStringValue checks if the actor's value matches any value in the scope array.
+// Supports both string and integer values in the scope array.
+func containsStringValue(vals []json.RawMessage, actorValue string) bool {
+	if len(vals) == 0 {
+		return true
+	}
+	actorValue = strings.TrimSpace(actorValue)
+	for _, v := range vals {
+		// Try to parse as string first
+		var strVal string
+		if err := json.Unmarshal(v, &strVal); err == nil {
+			if strings.TrimSpace(strVal) == actorValue {
+				return true
+			}
+			continue
+		}
+		// Try to parse as int (for legacy data with integer values)
+		var intVal int64
+		if err := json.Unmarshal(v, &intVal); err == nil {
+			if strconv.FormatInt(intVal, 10) == actorValue {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// containsStudentID checks if actor's student ID is in the scope.
+// Supports both string and integer values in the scope array.
+func containsStudentID(vals []json.RawMessage, actorStudentID string) bool {
+	if len(vals) == 0 {
+		return true
+	}
+	actorStudentID = strings.TrimSpace(actorStudentID)
+	for _, v := range vals {
+		// Try to parse as string first
+		var strVal string
+		if err := json.Unmarshal(v, &strVal); err == nil {
+			if strings.TrimSpace(strVal) == actorStudentID {
+				return true
+			}
+			continue
+		}
+		// Try to parse as int (for legacy data with integer student_ids)
+		var intVal int64
+		if err := json.Unmarshal(v, &intVal); err == nil {
+			if strconv.FormatInt(intVal, 10) == actorStudentID {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func normalizeJSON(raw []byte) []byte {
@@ -353,4 +500,13 @@ func containsInt(vals []int, v int) bool {
 		}
 	}
 	return false
+}
+
+// truncateString truncates a string to at most maxLen runes (not bytes).
+func truncateString(s string, maxLen int) string {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	return string(runes[:maxLen])
 }

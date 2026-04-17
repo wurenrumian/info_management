@@ -59,7 +59,9 @@ func Authorize(role int, action string) bool {
 			action == ActionFilesGet ||
 			action == ActionFilesList ||
 			action == ActionAnnouncementsList ||
+			action == ActionAnnouncementsListAll ||
 			action == ActionAnnouncementsGet ||
+			action == ActionAnnouncementsGetAll ||
 			action == ActionAnnouncementsAdminList ||
 			action == ActionAnnouncementsAdminGet ||
 			action == ActionAnnouncementsCreate ||

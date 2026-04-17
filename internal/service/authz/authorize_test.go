@@ -24,6 +24,8 @@ func TestAuthorizeMatrix(t *testing.T) {
 		{model.RoleCadre, authz.ActionUsersPatch, false},
 		{model.RoleTeacher, authz.ActionClassesGet, true},
 		{model.RoleTeacher, authz.ActionKnowledgePatch, true},
+		{model.RoleTeacher, authz.ActionAnnouncementsListAll, true},
+		{model.RoleTeacher, authz.ActionAnnouncementsGetAll, true},
 		{model.RoleTeacher, authz.ActionFilesDelete, false},
 		{model.RoleTeacher, authz.ActionClassesCreate, false},
 		{model.RoleSuperAdmin, authz.ActionFilesDelete, true},

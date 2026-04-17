@@ -7,10 +7,11 @@ import (
 )
 
 type Actor struct {
-	UserID  uint
-	Role    int
-	ClassID uint
-	Grade   string
+	UserID    uint
+	StudentID string
+	Role      int
+	ClassID   uint
+	Grade     string
 }
 
 const actorKey = "actor"

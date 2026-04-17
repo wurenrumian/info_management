@@ -182,7 +182,7 @@ func TestPublishSetsPublishedAt(t *testing.T) {
 	require.NoError(t, db.Create(&item).Error)
 
 	before := time.Now()
-	got, err := svc.Publish(context.Background(), item.ID, PublishRequest{})
+	got, _, err := svc.Publish(context.Background(), item.ID, PublishRequest{})
 	require.NoError(t, err)
 	require.Equal(t, StatusPublished, got.Status)
 	require.NotNil(t, got.PublishedAt)
@@ -207,7 +207,7 @@ func TestArchiveStatusCannotBePublished(t *testing.T) {
 	}
 	require.NoError(t, db.Create(&item).Error)
 
-	_, err := svc.Publish(context.Background(), item.ID, PublishRequest{})
+	_, _, err := svc.Publish(context.Background(), item.ID, PublishRequest{})
 	require.Error(t, err)
 	require.True(t, errors.Is(err, ErrAnnouncementState))
 }

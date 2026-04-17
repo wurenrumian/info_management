@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"strconv"
 	"strings"
 
@@ -135,12 +136,65 @@ func (h *AnnouncementHandler) List(c *gin.Context) {
 		return
 	}
 	limit, offset := parsePagination(c)
+	log.Printf("[announcements] list request: user_id=%d role=%d limit=%d offset=%d", actor.UserID, actor.Role, limit, offset)
 	list, total, err := h.svc.ListForStudent(actor, limit, offset)
+	if err != nil {
+		log.Printf("[announcements] list error: user_id=%d err=%v", actor.UserID, err)
+		response.Error(c, 500, "query failed")
+		return
+	}
+	log.Printf("[announcements] list success: user_id=%d total=%d", actor.UserID, total)
+	response.List(c, list, total)
+}
+
+// ListAllPublished fetches all published announcements without audience scope filtering.
+// Access is limited to privileged roles.
+func (h *AnnouncementHandler) ListAllPublished(c *gin.Context) {
+	actor, ok := auth.GetActor(c)
+	if !ok {
+		response.Error(c, 401, "unauthorized")
+		return
+	}
+	if !authz.Authorize(actor.Role, authz.ActionAnnouncementsListAll) {
+		response.Error(c, 403, "forbidden")
+		return
+	}
+	limit, offset := parsePagination(c)
+	list, total, err := h.svc.ListAllPublished(limit, offset)
 	if err != nil {
 		response.Error(c, 500, "query failed")
 		return
 	}
 	response.List(c, list, total)
+}
+
+// GetAllPublishedByID returns one published announcement without audience scope filtering.
+// Access is limited to privileged roles.
+func (h *AnnouncementHandler) GetAllPublishedByID(c *gin.Context) {
+	actor, ok := auth.GetActor(c)
+	if !ok {
+		response.Error(c, 401, "unauthorized")
+		return
+	}
+	if !authz.Authorize(actor.Role, authz.ActionAnnouncementsGetAll) {
+		response.Error(c, 403, "forbidden")
+		return
+	}
+	id, ok := parseUintParam(c, "id")
+	if !ok {
+		response.Error(c, 400, "invalid id")
+		return
+	}
+	item, err := h.svc.GetAllPublishedByID(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Error(c, 404, "announcement not found")
+			return
+		}
+		response.Error(c, 500, "query failed")
+		return
+	}
+	response.OK(c, item)
 }
 
 // GetByID returns one published announcement for student side.
@@ -326,7 +380,7 @@ func (h *AnnouncementHandler) Publish(c *gin.Context) {
 		// Keep compatibility: allow empty body.
 		req = PublishAnnouncementReq{}
 	}
-	item, err := h.svc.Publish(c.Request.Context(), id, annsvc.PublishRequest{
+	item, notifSummary, err := h.svc.Publish(c.Request.Context(), id, annsvc.PublishRequest{
 		SendNotification: req.SendNotification,
 		TemplateCode:     req.TemplateCode,
 	})
@@ -336,9 +390,10 @@ func (h *AnnouncementHandler) Publish(c *gin.Context) {
 	}
 	h.auditLogger.Log(c, actor, "announcements.publish", "announcement", item.ID)
 	response.OK(c, gin.H{
-		"id":           item.ID,
-		"status":       item.Status,
-		"published_at": item.PublishedAt,
+		"id":                   item.ID,
+		"status":               item.Status,
+		"published_at":         item.PublishedAt,
+		"notification_summary": notifSummary,
 	})
 }
 
