@@ -71,6 +71,7 @@ func New(db *gorm.DB) *gin.Engine {
 	admin.GET("/users", adminUserHandler.ListUsers)
 	admin.GET("/users/:id", adminUserHandler.GetUser)
 	admin.PATCH("/users/:id", adminUserHandler.PatchUser)
+	admin.POST("/users/import", adminUserHandler.ImportUsers)
 
 	admin.GET("/classes", adminClassHandler.ListClasses)
 	admin.GET("/classes/:id", adminClassHandler.GetClass)

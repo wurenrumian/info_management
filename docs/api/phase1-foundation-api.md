@@ -35,6 +35,7 @@ Token payload contains: `sub` (user ID), `role`, `class_id`, `grade`.
 - `GET /api/v1/admin/users`
 - `GET /api/v1/admin/users/:id`
 - `PATCH /api/v1/admin/users/:id`
+- `POST /api/v1/admin/users/import`（仅超级管理员）
 
 ## Admin Class Endpoints
 
@@ -148,3 +149,71 @@ Response:
   "code": 40002
 }
 ```
+
+## User Import API
+
+### POST /api/v1/admin/users/import
+
+仅超级管理员可用。
+
+支持三种输入格式：
+- `application/json`
+- `multipart/form-data` 上传 `.csv`
+- `multipart/form-data` 上传 `.xlsx`
+
+导入规则：
+- 必填字段：`student_id`, `name`, `class_id`
+- 可选字段：`role`, `major`, `college`, `enrollment_year`
+- `grade` 不允许导入写入（系统按 `class_id` 同步）
+- `student_id` 已存在时，跳过并记失败（不更新）
+- `class_id` 不存在时，跳过并记失败
+- 单行失败不影响其他行
+
+JSON 请求示例：
+```json
+{
+  "users": [
+    {
+      "student_id": "20260001",
+      "name": "张三",
+      "class_id": 1,
+      "role": 1,
+      "major": "计算机科学与技术",
+      "college": "信息学院",
+      "enrollment_year": 2026
+    }
+  ]
+}
+```
+
+成功响应（200）：
+```json
+{
+  "data": {
+    "imported": 1,
+    "failed": 2,
+    "errors": [
+      {
+        "row": 3,
+        "student_id": "20260002",
+        "error": "duplicate student_id"
+      },
+      {
+        "row": 4,
+        "student_id": "20260003",
+        "error": "class not found"
+      }
+    ]
+  }
+}
+```
+
+错误响应：
+| 状态码 | 响应体 | 说明 |
+|--------|--------|------|
+| 400 | `{"error":"invalid import payload"}` | JSON 结构非法 |
+| 400 | `{"error":"file is required"}` | 非 JSON 请求且未上传文件 |
+| 400 | `{"error":"invalid import file"}` | CSV/XLSX 内容非法 |
+| 400 | `{"error":"unsupported file type"}` | 文件扩展名不支持 |
+| 403 | `{"error":"forbidden"}` | 非超级管理员 |
+| 500 | `{"error":"import users failed"}` | 服务端导入失败 |
