@@ -13,6 +13,7 @@ func Authorize(role int, action string) bool {
 			action == ActionFilesUpload ||
 			action == ActionFilesGet ||
 			action == ActionFilesList ||
+			action == ActionPartyflowMeGet ||
 			action == ActionAnnouncementsList ||
 			action == ActionAnnouncementsGet ||
 			action == ActionApprovalsCreate ||
@@ -36,6 +37,14 @@ func Authorize(role int, action string) bool {
 			action == ActionFilesUpload ||
 			action == ActionFilesGet ||
 			action == ActionFilesList ||
+			action == ActionPartyflowMeGet ||
+			action == ActionPartyflowStatusesList ||
+			action == ActionPartyflowStatusesGet ||
+			action == ActionPartyflowStatusesCreate ||
+			action == ActionPartyflowStatusesPatch ||
+			action == ActionPartyflowStatusesImport ||
+			action == ActionPartyflowEventsCreate ||
+			action == ActionPartyflowRulesList ||
 			action == ActionAnnouncementsList ||
 			action == ActionAnnouncementsGet ||
 			action == ActionAnnouncementsAdminList ||
@@ -65,6 +74,16 @@ func Authorize(role int, action string) bool {
 			action == ActionFilesUpload ||
 			action == ActionFilesGet ||
 			action == ActionFilesList ||
+			action == ActionPartyflowMeGet ||
+			action == ActionPartyflowStatusesList ||
+			action == ActionPartyflowStatusesGet ||
+			action == ActionPartyflowStatusesCreate ||
+			action == ActionPartyflowStatusesPatch ||
+			action == ActionPartyflowStatusesImport ||
+			action == ActionPartyflowEventsCreate ||
+			action == ActionPartyflowRulesList ||
+			action == ActionPartyflowRulesPatch ||
+			action == ActionPartyflowRemindersScan ||
 			action == ActionAnnouncementsList ||
 			action == ActionAnnouncementsListAll ||
 			action == ActionAnnouncementsGet ||

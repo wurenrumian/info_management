@@ -47,6 +47,7 @@ func New(db *gorm.DB) *gin.Engine {
 	fileHandler := handler.NewFileHandler(db)
 	announcementHandler := handler.NewAnnouncementHandler(db, notifSvc)
 	approvalHandler := handler.NewApprovalHandler(db)
+	partyflowHandler := handler.NewPartyflowHandler(db)
 
 	api.GET("/me", meHandler.GetMe)
 	api.PATCH("/me", meHandler.PatchMe)
@@ -61,6 +62,7 @@ func New(db *gorm.DB) *gin.Engine {
 	api.GET("/approvals/me", approvalHandler.ListMine)
 	api.GET("/approvals/:id", approvalHandler.Get)
 	api.POST("/approvals/:id/withdraw", approvalHandler.Withdraw)
+	api.GET("/partyflow/me", partyflowHandler.GetMe)
 
 	// File APIs
 	api.POST("/files/upload", fileHandler.Upload)
@@ -114,6 +116,15 @@ func New(db *gorm.DB) *gin.Engine {
 	admin.POST("/approvals/:id/assign", approvalHandler.Assign)
 	admin.POST("/approvals/:id/remind", approvalHandler.Remind)
 	admin.POST("/approvals/scan-overdue", approvalHandler.ScanOverdue)
+	admin.GET("/partyflow/statuses", partyflowHandler.ListAdminStatuses)
+	admin.GET("/partyflow/statuses/:id", partyflowHandler.GetAdminStatus)
+	admin.POST("/partyflow/statuses", partyflowHandler.CreateAdminStatus)
+	admin.PATCH("/partyflow/statuses/:id", partyflowHandler.PatchAdminStatus)
+	admin.POST("/partyflow/statuses/import", partyflowHandler.ImportAdminStatuses)
+	admin.POST("/partyflow/statuses/:id/events", partyflowHandler.CreateAdminEvent)
+	admin.GET("/partyflow/reminder-rules", partyflowHandler.ListReminderRules)
+	admin.PATCH("/partyflow/reminder-rules/:id", partyflowHandler.PatchReminderRule)
+	admin.POST("/partyflow/reminders/scan", partyflowHandler.ScanReminders)
 
 	return r
 }
