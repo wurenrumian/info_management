@@ -274,7 +274,12 @@ func defaultSemester(v string, now time.Time) string {
 	return now.Format("2006") + "-" + half
 }
 
-func blank(v any) bool { return strings.TrimSpace(toString(v)) == "" }
+func blank(v any) bool {
+	if v == nil {
+		return true
+	}
+	return strings.TrimSpace(toString(v)) == ""
+}
 
 func toString(v any) string {
 	switch t := v.(type) {
