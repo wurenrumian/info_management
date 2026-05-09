@@ -14,7 +14,11 @@ func Authorize(role int, action string) bool {
 			action == ActionFilesGet ||
 			action == ActionFilesList ||
 			action == ActionAnnouncementsList ||
-			action == ActionAnnouncementsGet
+			action == ActionAnnouncementsGet ||
+			action == ActionApprovalsCreate ||
+			action == ActionApprovalsMyList ||
+			action == ActionApprovalsGet ||
+			action == ActionApprovalsWithdraw
 	case model.RoleCadre:
 		return action == ActionUsersList ||
 			action == ActionUsersGet ||
@@ -39,7 +43,10 @@ func Authorize(role int, action string) bool {
 			action == ActionAnnouncementsCreate ||
 			action == ActionAnnouncementsPatch ||
 			action == ActionAnnouncementsPublish ||
-			action == ActionAnnouncementsArchive
+			action == ActionAnnouncementsArchive ||
+			action == ActionApprovalsList ||
+			action == ActionApprovalsGet ||
+			action == ActionApprovalsRemind
 	case model.RoleTeacher:
 		return action == ActionUsersList ||
 			action == ActionUsersGet ||
@@ -67,7 +74,13 @@ func Authorize(role int, action string) bool {
 			action == ActionAnnouncementsCreate ||
 			action == ActionAnnouncementsPatch ||
 			action == ActionAnnouncementsPublish ||
-			action == ActionAnnouncementsArchive
+			action == ActionAnnouncementsArchive ||
+			action == ActionApprovalsList ||
+			action == ActionApprovalsGet ||
+			action == ActionApprovalsReview ||
+			action == ActionApprovalsAssign ||
+			action == ActionApprovalsRemind ||
+			action == ActionApprovalsOverdueScan
 	case model.RoleSuperAdmin:
 		return true
 	default:

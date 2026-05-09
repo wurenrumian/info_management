@@ -37,4 +37,13 @@ const (
 	ActionAnnouncementsPatch     = "announcements:patch"
 	ActionAnnouncementsPublish   = "announcements:publish"
 	ActionAnnouncementsArchive   = "announcements:archive"
+	ActionApprovalsCreate        = "approvals:create"
+	ActionApprovalsMyList        = "approvals:my:list"
+	ActionApprovalsGet           = "approvals:get"
+	ActionApprovalsWithdraw      = "approvals:withdraw"
+	ActionApprovalsList          = "approvals:list"
+	ActionApprovalsReview        = "approvals:review"
+	ActionApprovalsAssign        = "approvals:assign"
+	ActionApprovalsRemind        = "approvals:remind"
+	ActionApprovalsOverdueScan   = "approvals:overdue:scan"
 )

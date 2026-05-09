@@ -45,3 +45,6 @@ node_modules/
 .codex
 data/
 C++体系学习建议.pdf
+
+package-lock.json
+package.json

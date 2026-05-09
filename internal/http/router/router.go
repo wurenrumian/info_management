@@ -46,6 +46,7 @@ func New(db *gorm.DB) *gin.Engine {
 	adminKnowledgeHandler := handler.NewAdminKnowledgeHandler(db)
 	fileHandler := handler.NewFileHandler(db)
 	announcementHandler := handler.NewAnnouncementHandler(db, notifSvc)
+	approvalHandler := handler.NewApprovalHandler(db)
 
 	api.GET("/me", meHandler.GetMe)
 	api.PATCH("/me", meHandler.PatchMe)
@@ -56,6 +57,10 @@ func New(db *gorm.DB) *gin.Engine {
 	api.GET("/announcements/all", announcementHandler.ListAllPublished)
 	api.GET("/announcements/all/:id", announcementHandler.GetAllPublishedByID)
 	api.GET("/announcements/:id", announcementHandler.GetByID)
+	api.POST("/approvals", approvalHandler.Create)
+	api.GET("/approvals/me", approvalHandler.ListMine)
+	api.GET("/approvals/:id", approvalHandler.Get)
+	api.POST("/approvals/:id/withdraw", approvalHandler.Withdraw)
 
 	// File APIs
 	api.POST("/files/upload", fileHandler.Upload)
@@ -104,6 +109,11 @@ func New(db *gorm.DB) *gin.Engine {
 	admin.PATCH("/announcements/:id", announcementHandler.Patch)
 	admin.POST("/announcements/:id/publish", announcementHandler.Publish)
 	admin.POST("/announcements/:id/archive", announcementHandler.Archive)
+	admin.GET("/approvals", approvalHandler.ListAdmin)
+	admin.POST("/approvals/:id/review", approvalHandler.Review)
+	admin.POST("/approvals/:id/assign", approvalHandler.Assign)
+	admin.POST("/approvals/:id/remind", approvalHandler.Remind)
+	admin.POST("/approvals/scan-overdue", approvalHandler.ScanOverdue)
 
 	return r
 }
