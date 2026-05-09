@@ -3,6 +3,7 @@ package approvals_test
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"manage/internal/auth"
 	"manage/internal/model"
@@ -52,6 +53,41 @@ func TestCreateLeaveAndWithdraw(t *testing.T) {
 	require.Equal(t, model.ApprovalStatusWithdrawn, got.Status)
 }
 
+func TestCreateBudgetWritesSubmitAction(t *testing.T) {
+	db, svc := setupApprovalService(t)
+	actor := auth.Actor{UserID: 100, Role: model.RoleStudent, ClassID: 1, Grade: "2023"}
+
+	raw := []byte(`{"activity_name":"班级团日活动","purpose":"活动物料与场地费用","budget_amount":1200}`)
+	item, err := svc.Create(actor, approvals.CreateRequest{
+		ApprovalType: model.ApprovalTypeBudget,
+		Title:        "预算申请",
+		FormData:     raw,
+	})
+	require.NoError(t, err)
+	require.Equal(t, model.ApprovalStatusPending, item.Status)
+	require.Equal(t, model.ApprovalStepBudgetReview, item.CurrentStep)
+	require.NotNil(t, item.DueAt)
+
+	var actions []model.ApprovalAction
+	require.NoError(t, db.Where("approval_id = ?", item.ID).Find(&actions).Error)
+	require.Len(t, actions, 1)
+	require.Equal(t, model.ApprovalActionSubmit, actions[0].ActionType)
+	require.Equal(t, actor.UserID, actions[0].OperatorID)
+	require.Equal(t, model.ApprovalStatusPending, actions[0].ToStatus)
+}
+
+func TestCreateRejectsInvalidFormData(t *testing.T) {
+	_, svc := setupApprovalService(t)
+	actor := auth.Actor{UserID: 100, Role: model.RoleStudent, ClassID: 1, Grade: "2023"}
+
+	_, err := svc.Create(actor, approvals.CreateRequest{
+		ApprovalType: model.ApprovalTypeLeave,
+		Title:        "缺字段请假",
+		FormData:     []byte(`{"reason":"回家"}`),
+	})
+	require.ErrorIs(t, err, approvals.ErrInvalidFormData)
+}
+
 func TestTeacherReviewApprove(t *testing.T) {
 	db, svc := setupApprovalService(t)
 	student := auth.Actor{UserID: 100, Role: model.RoleStudent, ClassID: 1, Grade: "2023"}
@@ -72,4 +108,74 @@ func TestTeacherReviewApprove(t *testing.T) {
 	require.NoError(t, db.First(&got, item.ID).Error)
 	require.Equal(t, model.ApprovalStatusApproved, got.Status)
 	require.NotNil(t, got.DecidedAt)
+}
+
+func TestReviewedApprovalCannotBeReviewedAgain(t *testing.T) {
+	_, svc := setupApprovalService(t)
+	student := auth.Actor{UserID: 100, Role: model.RoleStudent, ClassID: 1, Grade: "2023"}
+	teacher := auth.Actor{UserID: 300, Role: model.RoleTeacher, ClassID: 1, Grade: "2023"}
+
+	raw := []byte(`{"reason":"回家","start_at":"2026-05-01T09:00:00+08:00","end_at":"2026-05-02T18:00:00+08:00","contact_phone":"13800000000"}`)
+	item, err := svc.Create(student, approvals.CreateRequest{
+		ApprovalType: model.ApprovalTypeLeave,
+		Title:        "请假申请",
+		FormData:     raw,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, svc.Review(teacher, item.ID, approvals.ReviewRequest{Action: "approve"}))
+	err = svc.Review(teacher, item.ID, approvals.ReviewRequest{Action: "reject"})
+	require.ErrorIs(t, err, approvals.ErrInvalidState)
+}
+
+func TestAssignUpdatesApproverAndWritesAction(t *testing.T) {
+	db, svc := setupApprovalService(t)
+	student := auth.Actor{UserID: 100, Role: model.RoleStudent, ClassID: 1, Grade: "2023"}
+	teacher := auth.Actor{UserID: 300, Role: model.RoleTeacher, ClassID: 1, Grade: "2023"}
+
+	raw := []byte(`{"reason":"回家","start_at":"2026-05-01T09:00:00+08:00","end_at":"2026-05-02T18:00:00+08:00","contact_phone":"13800000000"}`)
+	item, err := svc.Create(student, approvals.CreateRequest{
+		ApprovalType: model.ApprovalTypeLeave,
+		Title:        "请假申请",
+		FormData:     raw,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, svc.Assign(teacher, item.ID, approvals.AssignRequest{ApproverID: 300, Comment: "转交老师"}))
+
+	var got model.Approval
+	require.NoError(t, db.First(&got, item.ID).Error)
+	require.NotNil(t, got.CurrentApproverID)
+	require.Equal(t, uint(300), *got.CurrentApproverID)
+
+	var action model.ApprovalAction
+	require.NoError(t, db.Where("approval_id = ? AND action_type = ?", item.ID, model.ApprovalActionAssign).First(&action).Error)
+	require.Equal(t, teacher.UserID, action.OperatorID)
+	require.Equal(t, "转交老师", action.Comment)
+}
+
+func TestScanAndRemindOverdueWritesRemindAction(t *testing.T) {
+	db, svc := setupApprovalService(t)
+	now := time.Now()
+	past := now.Add(-time.Hour)
+	future := now.Add(time.Hour)
+
+	require.NoError(t, db.Create(&model.Approval{
+		ApplicantID: 100, ApprovalType: model.ApprovalTypeLeave, Status: model.ApprovalStatusPending,
+		CurrentStep: model.ApprovalStepReview, Title: "超时请假", Semester: "2026-1", SubmittedAt: now, DueAt: &past,
+	}).Error)
+	require.NoError(t, db.Create(&model.Approval{
+		ApplicantID: 100, ApprovalType: model.ApprovalTypeLeave, Status: model.ApprovalStatusPending,
+		CurrentStep: model.ApprovalStepReview, Title: "未超时请假", Semester: "2026-1", SubmittedAt: now, DueAt: &future,
+	}).Error)
+
+	out, err := svc.ScanAndRemindOverdue(t.Context(), now)
+	require.NoError(t, err)
+	require.Equal(t, 1, out.Scanned)
+	require.Equal(t, 1, out.Reminded)
+
+	var actions []model.ApprovalAction
+	require.NoError(t, db.Where("action_type = ?", model.ApprovalActionRemind).Find(&actions).Error)
+	require.Len(t, actions, 1)
+	require.Equal(t, uint(0), actions[0].OperatorID)
 }

@@ -32,8 +32,10 @@ func setupApprovalHandlerRouter(t *testing.T) (*gorm.DB, http.Handler) {
 	))
 	require.NoError(t, db.Create(&model.Class{ID: 1, ClassName: "信管1班", Grade: "2023", Major: "信息管理"}).Error)
 	require.NoError(t, db.Create(&model.User{ID: 100, StudentID: "S100", Name: "学生", Role: model.RoleStudent, ClassID: 1, Grade: "2023"}).Error)
+	require.NoError(t, db.Create(&model.User{ID: 101, StudentID: "S101", Name: "外班学生", Role: model.RoleStudent, ClassID: 2, Grade: "2022"}).Error)
 	require.NoError(t, db.Create(&model.User{ID: 200, StudentID: "C200", Name: "团干部", Role: model.RoleCadre, ClassID: 1, Grade: "2023"}).Error)
 	require.NoError(t, db.Create(&model.User{ID: 300, StudentID: "T300", Name: "老师", Role: model.RoleTeacher, ClassID: 1, Grade: "2023"}).Error)
+	require.NoError(t, db.Create(&model.User{ID: 301, StudentID: "T301", Name: "外班老师", Role: model.RoleTeacher, ClassID: 2, Grade: "2022"}).Error)
 	require.NoError(t, db.Create(&model.User{ID: 999, StudentID: "A999", Name: "超管", Role: model.RoleSuperAdmin, ClassID: 1, Grade: "2023"}).Error)
 	return db, router.New(db)
 }
@@ -62,6 +64,20 @@ func TestApprovalCreateAndListMine(t *testing.T) {
 	require.Contains(t, w2.Body.String(), "五一请假")
 }
 
+func TestApprovalGetRejectsOtherStudent(t *testing.T) {
+	db, r := setupApprovalHandlerRouter(t)
+	require.NoError(t, db.Create(&model.Approval{
+		ApplicantID: 100, ApprovalType: model.ApprovalTypeLeave, Status: model.ApprovalStatusPending,
+		CurrentStep: "review", Title: "本人申请", Semester: "2026-1",
+	}).Error)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/approvals/1", nil)
+	req.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(101, model.RoleStudent, 2, "2022"))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusNotFound, w.Code)
+}
+
 func TestCadreReviewForbidden(t *testing.T) {
 	db, r := setupApprovalHandlerRouter(t)
 	require.NoError(t, db.Create(&model.Approval{
@@ -75,6 +91,26 @@ func TestCadreReviewForbidden(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	require.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func TestTeacherListAdminUsesScope(t *testing.T) {
+	db, r := setupApprovalHandlerRouter(t)
+	require.NoError(t, db.Create(&model.Approval{
+		ApplicantID: 100, ApprovalType: model.ApprovalTypeLeave, Status: model.ApprovalStatusPending,
+		CurrentStep: "review", Title: "范围内申请", Semester: "2026-1",
+	}).Error)
+	require.NoError(t, db.Create(&model.Approval{
+		ApplicantID: 101, ApprovalType: model.ApprovalTypeLeave, Status: model.ApprovalStatusPending,
+		CurrentStep: "review", Title: "范围外申请", Semester: "2026-1",
+	}).Error)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/approvals", nil)
+	req.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(300, model.RoleTeacher, 1, "2023"))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), "范围内申请")
+	require.NotContains(t, w.Body.String(), "范围外申请")
 }
 
 func TestTeacherReviewSuccess(t *testing.T) {
