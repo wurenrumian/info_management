@@ -67,9 +67,9 @@ func (h *ApprovalHandler) Create(c *gin.Context) {
 	}
 
 	item, err := h.svc.Create(actor, approvals.CreateRequest{
-		ApprovalType: req.ApprovalType,
-		Title:        req.Title,
-		FormData:     req.FormData,
+		ApprovalType:      req.ApprovalType,
+		Title:             req.Title,
+		FormData:          req.FormData,
 		AttachmentFileIDs: req.AttachmentFileIDs,
 		TemplateFileID:    req.TemplateFileID,
 		Semester:          req.Semester,
