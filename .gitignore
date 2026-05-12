@@ -36,6 +36,8 @@ coverage/
 node_modules/
 .worktrees/
 
+frontend/app/
+
 # secrect files
 # 证书文件
 *.dat 

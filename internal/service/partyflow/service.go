@@ -28,6 +28,15 @@ var (
 	partyStatuses = map[string]struct{}{
 		"none": {}, "applicant": {}, "activist": {}, "development_target": {}, "probationary_member": {}, "full_member": {},
 	}
+	statusLabels = map[string]string{
+		"none":                "未开始",
+		"applicant":           "申请人",
+		"activist":            "积极分子",
+		"development_target":  "发展对象",
+		"probationary_member": "预备党员",
+		"full_member":         "正式党员",
+		"member":              "团员",
+	}
 )
 
 // Service contains partyflow business logic.
@@ -113,11 +122,15 @@ func (s *Service) CreateStatus(actor auth.Actor, req CreateStatusRequest) (*repo
 		return nil, err
 	}
 
+	startedAt := req.StatusStartedAt
+	if startedAt.IsZero() {
+		startedAt = time.Now()
+	}
 	item := repo.NewStatusFromCreate(
 		req.UserID,
 		orgType,
 		status,
-		req.StatusStartedAt,
+		startedAt,
 		req.JoinedAt,
 		strings.TrimSpace(req.NextActionHint),
 		normalizeJSON(req.Metadata),
@@ -126,12 +139,16 @@ func (s *Service) CreateStatus(actor auth.Actor, req CreateStatusRequest) (*repo
 		return nil, err
 	}
 
+	note := strings.TrimSpace(req.Note)
+	if note == "" {
+		note = "初始化：" + statusLabel(status)
+	}
 	_ = s.statusRepo.CreateEvent(&model.PartyflowEvent{
 		PartyflowStatusID: item.ID,
-		EventType:         "status_change",
+		EventType:         "create",
 		EventCode:         "status_initialized",
 		ToStatus:          item.Status,
-		Note:              strings.TrimSpace(req.Note),
+		Note:              note,
 		HappenedAt:        item.StatusStartedAt,
 	})
 
@@ -187,6 +204,9 @@ func (s *Service) PatchStatus(actor auth.Actor, id uint, req PatchStatusRequest)
 		eventNote := ""
 		if req.Note != nil {
 			eventNote = strings.TrimSpace(*req.Note)
+		}
+		if eventNote == "" {
+			eventNote = "阶段变更：" + statusLabel(before.Status) + " → " + statusLabel(strings.TrimSpace(*req.Status))
 		}
 		happenedAt := time.Now()
 		if req.StatusStartedAt != nil {
@@ -278,12 +298,16 @@ func (s *Service) ImportStatuses(actor auth.Actor, req ImportStatusesRequest) (I
 				result.FailedItems = append(result.FailedItems, ImportFailedItem{StudentID: studentID, Reason: "create failed"})
 				continue
 			}
+			note := strings.TrimSpace(item.Note)
+			if note == "" {
+				note = "批量导入：" + statusLabel(status)
+			}
 			_ = s.statusRepo.CreateEvent(&model.PartyflowEvent{
 				PartyflowStatusID: created.ID,
 				EventType:         "import",
 				EventCode:         "status_import",
 				ToStatus:          status,
-				Note:              strings.TrimSpace(item.Note),
+				Note:              note,
 				HappenedAt:        happenedAt,
 			})
 			result.SuccessCount++
@@ -300,13 +324,17 @@ func (s *Service) ImportStatuses(actor auth.Actor, req ImportStatusesRequest) (I
 			result.FailedItems = append(result.FailedItems, ImportFailedItem{StudentID: studentID, Reason: "update failed"})
 			continue
 		}
+		note := strings.TrimSpace(item.Note)
+		if note == "" {
+			note = "批量导入：" + statusLabel(existing.Status) + " → " + statusLabel(status)
+		}
 		_ = s.statusRepo.CreateEvent(&model.PartyflowEvent{
 			PartyflowStatusID: existing.ID,
 			EventType:         "import",
 			EventCode:         "status_import",
 			FromStatus:        existing.Status,
 			ToStatus:          status,
-			Note:              strings.TrimSpace(item.Note),
+			Note:              note,
 			HappenedAt:        happenedAt,
 		})
 		result.SuccessCount++
@@ -338,13 +366,24 @@ func (s *Service) CreateEvent(actor auth.Actor, statusID uint, req CreateEventRe
 	if happenedAt.IsZero() {
 		happenedAt = time.Now()
 	}
+	note := strings.TrimSpace(req.Note)
+	if note == "" {
+		if eventType == "milestone" {
+			note = "里程碑"
+		} else {
+			note = "人工调整"
+		}
+		if strings.TrimSpace(req.EventCode) != "" {
+			note = note + "：" + strings.TrimSpace(req.EventCode)
+		}
+	}
 	if err := s.statusRepo.CreateEvent(&model.PartyflowEvent{
 		PartyflowStatusID: row.ID,
 		EventType:         eventType,
 		EventCode:         strings.TrimSpace(req.EventCode),
 		FromStatus:        row.Status,
 		ToStatus:          row.Status,
-		Note:              strings.TrimSpace(req.Note),
+		Note:              note,
 		HappenedAt:        happenedAt,
 		Metadata:          normalizeJSON(req.Metadata),
 	}); err != nil {
@@ -463,13 +502,19 @@ func (s *Service) ScanReminders(req ScanRemindersRequest) (ScanResult, error) {
 				continue
 			}
 			raw, _ := json.Marshal(map[string]any{"period_index": periodIndex, "rule_code": rule.RuleCode})
+			note := strings.TrimSpace(rule.Title)
+			if note != "" {
+				note = note + "已发送"
+			} else {
+				note = "reminder sent"
+			}
 			if err := s.statusRepo.CreateEvent(&model.PartyflowEvent{
 				PartyflowStatusID: st.ID,
 				EventType:         "reminder_sent",
 				EventCode:         rule.RuleCode,
 				FromStatus:        st.Status,
 				ToStatus:          st.Status,
-				Note:              rule.Title,
+				Note:              note,
 				HappenedAt:        now,
 				Metadata:          datatypes.JSON(raw),
 			}); err != nil {
@@ -532,6 +577,17 @@ func nextDueOverride(raw datatypes.JSON, ruleCode string) *time.Time {
 		return nil
 	}
 	return &t
+}
+
+func statusLabel(status string) string {
+	status = strings.TrimSpace(status)
+	if v, ok := statusLabels[status]; ok {
+		return v
+	}
+	if status == "" {
+		return "-"
+	}
+	return status
 }
 
 func defaultReminderRules() []model.PartyflowReminderRule {

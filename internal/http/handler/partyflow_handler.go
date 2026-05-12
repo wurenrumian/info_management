@@ -7,6 +7,8 @@ import (
 
 	"manage/internal/auth"
 	"manage/internal/http/response"
+	"manage/internal/repo"
+	"manage/internal/service/audit"
 	"manage/internal/service/authz"
 	partyflowsvc "manage/internal/service/partyflow"
 
@@ -16,12 +18,16 @@ import (
 
 // PartyflowHandler handles partyflow APIs.
 type PartyflowHandler struct {
-	svc *partyflowsvc.Service
+	svc         *partyflowsvc.Service
+	auditLogger *audit.Logger
 }
 
 // NewPartyflowHandler creates a handler instance.
 func NewPartyflowHandler(db *gorm.DB) *PartyflowHandler {
-	return &PartyflowHandler{svc: partyflowsvc.NewService(db)}
+	return &PartyflowHandler{
+		svc:         partyflowsvc.NewService(db),
+		auditLogger: audit.NewLogger(repo.NewAdminLogRepo(db)),
+	}
 }
 
 // GetMe handles GET /api/v1/partyflow/me
@@ -141,6 +147,7 @@ func (h *PartyflowHandler) CreateAdminStatus(c *gin.Context) {
 		}
 		return
 	}
+	h.auditLogger.Log(c, actor, "partyflow.status_create", "partyflow_status", item.ID)
 	response.OK(c, item)
 }
 
@@ -177,6 +184,7 @@ func (h *PartyflowHandler) PatchAdminStatus(c *gin.Context) {
 		}
 		return
 	}
+	h.auditLogger.Log(c, actor, "partyflow.status_patch", "partyflow_status", uint(id))
 	response.OK(c, item)
 }
 
@@ -201,6 +209,7 @@ func (h *PartyflowHandler) ImportAdminStatuses(c *gin.Context) {
 		response.Error(c, 500, "import partyflow statuses failed")
 		return
 	}
+	h.auditLogger.Log(c, actor, "partyflow.status_import", "partyflow_status", 0)
 	response.OK(c, result)
 }
 
@@ -237,6 +246,7 @@ func (h *PartyflowHandler) CreateAdminEvent(c *gin.Context) {
 		}
 		return
 	}
+	h.auditLogger.Log(c, actor, "partyflow.event_create", "partyflow_status", uint(id))
 	response.OK(c, item)
 }
 
@@ -302,6 +312,7 @@ func (h *PartyflowHandler) PatchReminderRule(c *gin.Context) {
 		response.Error(c, 500, "patch partyflow reminder rule failed")
 		return
 	}
+	h.auditLogger.Log(c, actor, "partyflow.rule_patch", "partyflow_rule", uint(id))
 	response.OK(c, item)
 }
 
@@ -326,5 +337,6 @@ func (h *PartyflowHandler) ScanReminders(c *gin.Context) {
 		response.Error(c, 500, "scan partyflow reminders failed")
 		return
 	}
+	h.auditLogger.Log(c, actor, "partyflow.reminder_scan", "partyflow_rule", 0)
 	response.OK(c, result)
 }
