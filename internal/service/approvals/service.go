@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
+	"time"
+
 	"manage/internal/auth"
 	"manage/internal/model"
 	"manage/internal/repo"
+	approvalscert "manage/internal/service/certificates"
 	"manage/internal/service/authz"
-	"strings"
-	"time"
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -23,14 +25,18 @@ var (
 )
 
 type Service struct {
-	approvalRepo *repo.ApprovalRepo
-	actionRepo   *repo.ApprovalActionRepo
+	approvalRepo          *repo.ApprovalRepo
+	actionRepo            *repo.ApprovalActionRepo
+	certificateRecordRepo *repo.CertificateRecordRepo
+	certificateService    *approvalscert.Service
 }
 
 func NewService(db *gorm.DB) *Service {
 	return &Service{
-		approvalRepo: repo.NewApprovalRepo(db),
-		actionRepo:   repo.NewApprovalActionRepo(db),
+		approvalRepo:          repo.NewApprovalRepo(db),
+		actionRepo:            repo.NewApprovalActionRepo(db),
+		certificateRecordRepo: repo.NewCertificateRecordRepo(db),
+		certificateService:    approvalscert.NewService(db),
 	}
 }
 
@@ -61,9 +67,9 @@ type ListAdminRequest struct {
 }
 
 type ApprovalDetail struct {
-	Approval           *model.Approval        `json:"approval"`
-	Actions            []model.ApprovalAction `json:"actions"`
-	CertificateRecords []any                  `json:"certificate_records"`
+	Approval           *model.Approval          `json:"approval"`
+	Actions            []model.ApprovalAction   `json:"actions"`
+	CertificateRecords []model.CertificateRecord `json:"certificate_records"`
 }
 
 func (s *Service) Create(actor auth.Actor, req CreateRequest) (*model.Approval, error) {
@@ -95,10 +101,13 @@ func (s *Service) Create(actor auth.Actor, req CreateRequest) (*model.Approval, 
 	if err := s.approvalRepo.Create(item); err != nil {
 		return nil, err
 	}
-	_ = s.actionRepo.Create(&model.ApprovalAction{
+	if err := s.actionRepo.Create(&model.ApprovalAction{
 		ApprovalID: item.ID, ActionType: model.ApprovalActionSubmit, OperatorID: actor.UserID,
 		ToStatus: model.ApprovalStatusPending, Snapshot: mustJSON(map[string]any{"submitted_at": now}),
-	})
+	}); err != nil {
+		return nil, err
+	}
+	_, _ = s.certificateService.GenerateApplicationPDF(context.Background(), item.ID)
 	return item, nil
 }
 
@@ -115,7 +124,11 @@ func (s *Service) Get(actor auth.Actor, id uint) (*ApprovalDetail, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ApprovalDetail{Approval: item, Actions: actions, CertificateRecords: []any{}}, nil
+	records, err := s.certificateRecordRepo.ListByApprovalID(item.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &ApprovalDetail{Approval: item, Actions: actions, CertificateRecords: records}, nil
 }
 
 func (s *Service) Withdraw(actor auth.Actor, id uint) error {
@@ -171,10 +184,16 @@ func (s *Service) Review(actor auth.Actor, id uint, req ReviewRequest) error {
 	if err := s.approvalRepo.Save(item); err != nil {
 		return err
 	}
-	return s.actionRepo.Create(&model.ApprovalAction{
+	if err := s.actionRepo.Create(&model.ApprovalAction{
 		ApprovalID: item.ID, ActionType: actionType, OperatorID: actor.UserID,
 		FromStatus: from, ToStatus: toStatus, Comment: strings.TrimSpace(req.Comment),
-	})
+	}); err != nil {
+		return err
+	}
+	if toStatus == model.ApprovalStatusApproved {
+		_, _ = s.certificateService.GenerateApprovalCertificate(context.Background(), item.ID)
+	}
+	return nil
 }
 
 func (s *Service) Assign(actor auth.Actor, id uint, req AssignRequest) error {

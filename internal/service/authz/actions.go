@@ -56,4 +56,11 @@ const (
 	ActionPartyflowRulesList      = "partyflow:rules:list"
 	ActionPartyflowRulesPatch     = "partyflow:rules:patch"
 	ActionPartyflowRemindersScan  = "partyflow:reminders:scan"
+	ActionCertificatesMyList               = "certificates:my:list"
+	ActionCertificatesGet                  = "certificates:get"
+	ActionCertificatesTemplateAdminList    = "certificates:template:admin:list"
+	ActionCertificatesTemplateToggle       = "certificates:template:toggle"
+	ActionCertificatesApplicationRegenerate = "certificates:application:regenerate"
+	ActionCertificatesCertificateRegenerate = "certificates:approval_certificate:regenerate"
+	ActionCertificatesRevoke               = "certificates:revoke"
 )

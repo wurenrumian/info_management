@@ -36,6 +36,9 @@ func New(db *gorm.DB) *gin.Engine {
 	subscribeHandler := handler.NewSubscribeHandler(db)
 	api.POST("/wechat/callback", subscribeHandler.WechatCallback)
 
+	certificateHandler := handler.NewCertificateHandler(db)
+	api.GET("/certificates/verify", certificateHandler.Verify)
+
 	api.Use(middleware.JWTAuth(jwtSecret))
 
 	meHandler := handler.NewMeHandler(db)
@@ -63,6 +66,8 @@ func New(db *gorm.DB) *gin.Engine {
 	api.GET("/approvals/:id", approvalHandler.Get)
 	api.POST("/approvals/:id/withdraw", approvalHandler.Withdraw)
 	api.GET("/partyflow/me", partyflowHandler.GetMe)
+	api.GET("/certificates/me", certificateHandler.ListMine)
+	api.GET("/certificates/:id", certificateHandler.Get)
 
 	// File APIs
 	api.POST("/files/upload", fileHandler.Upload)
@@ -125,6 +130,12 @@ func New(db *gorm.DB) *gin.Engine {
 	admin.GET("/partyflow/reminder-rules", partyflowHandler.ListReminderRules)
 	admin.PATCH("/partyflow/reminder-rules/:id", partyflowHandler.PatchReminderRule)
 	admin.POST("/partyflow/reminders/scan", partyflowHandler.ScanReminders)
+	admin.GET("/certificates/templates", certificateHandler.ListAdminTemplates)
+	admin.POST("/certificates/templates/:id/activate", certificateHandler.ToggleTemplate)
+	admin.POST("/certificates/templates/:id/deactivate", certificateHandler.ToggleTemplate)
+	admin.POST("/approvals/:id/application-pdf/regenerate", certificateHandler.RegenerateApplicationPDF)
+	admin.POST("/approvals/:id/certificate/regenerate", certificateHandler.RegenerateApprovalCertificate)
+	admin.POST("/certificates/:id/revoke", certificateHandler.Revoke)
 
 	return r
 }

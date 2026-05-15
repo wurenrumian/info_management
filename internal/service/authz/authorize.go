@@ -19,7 +19,9 @@ func Authorize(role int, action string) bool {
 			action == ActionApprovalsCreate ||
 			action == ActionApprovalsMyList ||
 			action == ActionApprovalsGet ||
-			action == ActionApprovalsWithdraw
+			action == ActionApprovalsWithdraw ||
+			action == ActionCertificatesMyList ||
+			action == ActionCertificatesGet
 	case model.RoleCadre:
 		return action == ActionUsersList ||
 			action == ActionUsersGet ||
@@ -55,7 +57,9 @@ func Authorize(role int, action string) bool {
 			action == ActionAnnouncementsArchive ||
 			action == ActionApprovalsList ||
 			action == ActionApprovalsGet ||
-			action == ActionApprovalsRemind
+			action == ActionApprovalsRemind ||
+			action == ActionCertificatesMyList ||
+			action == ActionCertificatesGet
 	case model.RoleTeacher:
 		return action == ActionUsersList ||
 			action == ActionUsersGet ||
@@ -99,7 +103,14 @@ func Authorize(role int, action string) bool {
 			action == ActionApprovalsReview ||
 			action == ActionApprovalsAssign ||
 			action == ActionApprovalsRemind ||
-			action == ActionApprovalsOverdueScan
+			action == ActionApprovalsOverdueScan ||
+			action == ActionCertificatesMyList ||
+			action == ActionCertificatesGet ||
+			action == ActionCertificatesTemplateAdminList ||
+			action == ActionCertificatesTemplateToggle ||
+			action == ActionCertificatesApplicationRegenerate ||
+			action == ActionCertificatesCertificateRegenerate ||
+			action == ActionCertificatesRevoke
 	case model.RoleSuperAdmin:
 		return true
 	default:
