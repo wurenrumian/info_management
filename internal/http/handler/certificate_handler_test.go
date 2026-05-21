@@ -21,6 +21,7 @@ func setupCertificateHandlerRouter(t *testing.T) (*gorm.DB, http.Handler) {
 
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
+	t.Setenv("DOCUMENT_UPLOAD_DIR", t.TempDir())
 
 	err = db.AutoMigrate(
 		&model.Class{},
@@ -32,6 +33,7 @@ func setupCertificateHandlerRouter(t *testing.T) (*gorm.DB, http.Handler) {
 		&model.UserSubscribe{},
 		&model.Approval{},
 		&model.ApprovalAction{},
+		&model.Document{},
 		&model.CertificateTemplate{},
 		&model.CertificateRecord{},
 	)
@@ -189,6 +191,7 @@ func TestCertificateAdminRegenerateApplicationPDF(t *testing.T) {
 	
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Body.String(), `"document_stage":"application"`)
+	require.Contains(t, w.Body.String(), `"document_id":`)
 }
 
 func TestCertificateAdminRevoke(t *testing.T) {
@@ -214,6 +217,7 @@ func TestCertificateAdminRegenerateApprovalCertificate(t *testing.T) {
 	
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Body.String(), `"document_stage":"approval_certificate"`)
+	require.Contains(t, w.Body.String(), `"document_id":`)
 }
 
 func TestCertificateAdminRegenerateApprovalCertificateForbiddenForCadre(t *testing.T) {

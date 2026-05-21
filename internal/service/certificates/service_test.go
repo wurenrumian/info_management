@@ -21,9 +21,11 @@ func setupCertificateService(t *testing.T) (*gorm.DB, *certificates.Service) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 
+	t.Setenv("DOCUMENT_UPLOAD_DIR", t.TempDir())
 	err = db.AutoMigrate(
 		&model.User{},
 		&model.Approval{},
+		&model.Document{},
 		&model.CertificateTemplate{},
 		&model.CertificateRecord{},
 	)
@@ -101,10 +103,16 @@ func TestGenerateApplicationPDF(t *testing.T) {
 	require.Equal(t, model.CertificateDocumentStageApplication, record.DocumentStage)
 	require.Equal(t, model.CertificateRecordStatusGenerated, record.Status)
 	require.Equal(t, model.CertificateSealStatusNone, record.SealStatus)
+	require.NotZero(t, record.DocumentID)
 
 	var stored model.CertificateRecord
 	require.NoError(t, db.First(&stored, record.ID).Error)
 	require.Equal(t, uint(1), stored.ApprovalID)
+	require.NotZero(t, stored.DocumentID)
+
+	var doc model.Document
+	require.NoError(t, db.First(&doc, stored.DocumentID).Error)
+	require.Equal(t, "application/pdf", doc.ContentType)
 }
 
 func TestGenerateApprovalCertificate(t *testing.T) {
@@ -117,6 +125,7 @@ func TestGenerateApprovalCertificate(t *testing.T) {
 	require.NotEmpty(t, record.VerificationCode)
 	require.NotEmpty(t, record.VerificationHash)
 	require.Equal(t, model.CertificateSealStatusInternalSealApplied, record.SealStatus)
+	require.NotZero(t, record.DocumentID)
 
 	record2, err := svc.GenerateApprovalCertificate(context.Background(), 2)
 	require.NoError(t, err)

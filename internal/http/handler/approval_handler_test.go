@@ -19,6 +19,7 @@ func setupApprovalHandlerRouter(t *testing.T) (*gorm.DB, http.Handler) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
+	t.Setenv("DOCUMENT_UPLOAD_DIR", t.TempDir())
 	require.NoError(t, db.AutoMigrate(
 		&model.Class{},
 		&model.User{},
@@ -29,6 +30,7 @@ func setupApprovalHandlerRouter(t *testing.T) (*gorm.DB, http.Handler) {
 		&model.UserSubscribe{},
 		&model.Approval{},
 		&model.ApprovalAction{},
+		&model.Document{},
 		&model.CertificateTemplate{},
 		&model.CertificateRecord{},
 	))

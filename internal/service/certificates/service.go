@@ -4,11 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"manage/internal/auth"
+	"manage/internal/config"
 	"manage/internal/model"
 	"manage/internal/repo"
 	"manage/internal/service/authz"
@@ -27,7 +31,9 @@ type Service struct {
 	approvalRepo *repo.ApprovalRepo
 	templateRepo *repo.CertificateTemplateRepo
 	recordRepo   *repo.CertificateRecordRepo
+	documentRepo *repo.DocumentRepo
 	renderer     Renderer
+	uploadDir    string
 }
 
 func NewService(db *gorm.DB) *Service {
@@ -42,7 +48,9 @@ func NewServiceWithRenderer(db *gorm.DB, renderer Renderer) *Service {
 		approvalRepo: repo.NewApprovalRepo(db),
 		templateRepo: repo.NewCertificateTemplateRepo(db),
 		recordRepo:   repo.NewCertificateRecordRepo(db),
+		documentRepo: repo.NewDocumentRepo(db),
 		renderer:     renderer,
+		uploadDir:    config.DocumentUploadDir(),
 	}
 }
 
@@ -176,7 +184,8 @@ func (s *Service) Revoke(_ context.Context, id uint, reason string) (*model.Cert
 func (s *Service) persistRenderedRecord(ctx context.Context, approval *model.Approval, tpl *model.CertificateTemplate, stage, certificateNo, verificationCode, verificationHash, sealStatus string, sealAppliedAt *time.Time, payload map[string]any) (*model.CertificateRecord, error) {
 	now := time.Now()
 	record := &model.CertificateRecord{ApprovalID: approval.ID, ApplicantID: approval.ApplicantID, TemplateID: tpl.ID, DocumentStage: stage, CertificateNo: certificateNo, VerificationCode: verificationCode, VerificationHash: verificationHash, RenderedPayload: buildRenderedPayload(payload), DocumentID: 0, SealStatus: sealStatus, Status: model.CertificateRecordStatusGenerated, GeneratedAt: &now, SealAppliedAt: sealAppliedAt}
-	if _, err := s.renderer.Render(ctx, tpl.TemplatePath, payload); err != nil {
+	rendered, err := s.renderer.Render(ctx, tpl.TemplatePath, payload)
+	if err != nil {
 		record.Status = model.CertificateRecordStatusFailed
 		record.GeneratedAt = nil
 		record.SealAppliedAt = nil
@@ -186,10 +195,32 @@ func (s *Service) persistRenderedRecord(ctx context.Context, approval *model.App
 		}
 		return nil, err
 	}
+	doc, err := s.createDocument(approval, stage, rendered, now)
+	if err != nil {
+		record.Status = model.CertificateRecordStatusFailed
+		record.GeneratedAt = nil
+		record.SealAppliedAt = nil
+		record.ErrorMessage = err.Error()
+		if err2 := s.recordRepo.Create(record); err2 != nil {
+			return nil, err2
+		}
+		return nil, err
+	}
+	record.DocumentID = doc.ID
 	if err := s.recordRepo.Create(record); err != nil {
 		return nil, err
 	}
 	return record, nil
+}
+
+func (s *Service) createDocument(approval *model.Approval, stage string, content []byte, now time.Time) (*model.Document, error) {
+	relPath := filepath.ToSlash(filepath.Join("certificates", fmt.Sprintf("%s_%d_%d.pdf", stage, approval.ID, now.UnixNano())))
+	fullPath := filepath.Join(s.uploadDir, filepath.FromSlash(relPath))
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil { return nil, err }
+	if err := os.WriteFile(fullPath, content, 0o644); err != nil { return nil, err }
+	doc := &model.Document{Title: fmt.Sprintf("approval_%d_%s.pdf", approval.ID, stage), FilePath: relPath, FileSize: int64(len(content)), ContentType: "application/pdf", UploaderID: approval.ApplicantID}
+	if err := s.documentRepo.Create(doc); err != nil { return nil, err }
+	return doc, nil
 }
 
 func (s *Service) nextApprovalCertificateIdentifiers(approval *model.Approval, now time.Time) (string, string, error) {

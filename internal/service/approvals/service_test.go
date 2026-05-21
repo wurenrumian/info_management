@@ -18,7 +18,8 @@ func setupApprovalService(t *testing.T) (*gorm.DB, *approvals.Service) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Approval{}, &model.ApprovalAction{}, &model.CertificateTemplate{}, &model.CertificateRecord{}))
+	t.Setenv("DOCUMENT_UPLOAD_DIR", t.TempDir())
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Approval{}, &model.ApprovalAction{}, &model.Document{}, &model.CertificateTemplate{}, &model.CertificateRecord{}))
 	require.NoError(t, db.Create(&model.User{ID: 100, StudentID: "S100", Name: "stu", Role: model.RoleStudent, ClassID: 1, Grade: "2023"}).Error)
 	require.NoError(t, db.Create(&model.User{ID: 300, StudentID: "T300", Name: "tea", Role: model.RoleTeacher, ClassID: 1, Grade: "2023"}).Error)
 	require.NoError(t, db.Create(&model.CertificateTemplate{ID: 1, Code: "leave_application_pdf", Name: "Leave Application", ApprovalType: model.ApprovalTypeLeave, DocumentStage: model.CertificateDocumentStageApplication, Status: model.CertificateTemplateStatusActive, Renderer: model.CertificateRendererTypst, TemplatePath: "templates/certificates/leave_application.typ", TemplateVersion: "v1"}).Error)
@@ -57,6 +58,7 @@ func TestCreateLeaveAndWithdraw(t *testing.T) {
 	require.NoError(t, db.Where("approval_id = ?", item.ID).Order("id asc").Find(&records).Error)
 	require.Len(t, records, 1)
 	require.Equal(t, model.CertificateDocumentStageApplication, records[0].DocumentStage)
+	require.NotZero(t, records[0].DocumentID)
 }
 
 func TestCreateBudgetWritesSubmitAction(t *testing.T) {
@@ -119,6 +121,8 @@ func TestTeacherReviewApprove(t *testing.T) {
 	require.Len(t, records, 2)
 	require.Equal(t, model.CertificateDocumentStageApplication, records[0].DocumentStage)
 	require.Equal(t, model.CertificateDocumentStageApprovalCertificate, records[1].DocumentStage)
+	require.NotZero(t, records[0].DocumentID)
+	require.NotZero(t, records[1].DocumentID)
 }
 
 func TestGetIncludesCertificateRecords(t *testing.T) {
