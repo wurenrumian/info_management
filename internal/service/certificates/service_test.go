@@ -192,7 +192,7 @@ func TestToggleTemplateAndRevoke(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, model.CertificateRecordStatusRevoked, revoked.Status)
 	require.NotNil(t, revoked.RevokedAt)
-	
+
 	var stored model.CertificateRecord
 	require.NoError(t, db.First(&stored, record.ID).Error)
 	require.Equal(t, model.CertificateRecordStatusRevoked, stored.Status)

@@ -10,8 +10,8 @@ import (
 	"manage/internal/auth"
 	"manage/internal/model"
 	"manage/internal/repo"
-	approvalscert "manage/internal/service/certificates"
 	"manage/internal/service/authz"
+	approvalscert "manage/internal/service/certificates"
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -67,8 +67,8 @@ type ListAdminRequest struct {
 }
 
 type ApprovalDetail struct {
-	Approval           *model.Approval          `json:"approval"`
-	Actions            []model.ApprovalAction   `json:"actions"`
+	Approval           *model.Approval           `json:"approval"`
+	Actions            []model.ApprovalAction    `json:"actions"`
 	CertificateRecords []model.CertificateRecord `json:"certificate_records"`
 }
 

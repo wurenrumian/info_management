@@ -171,24 +171,24 @@ func TestCertificateVerifyPublic(t *testing.T) {
 
 func TestCertificateAdminTemplates(t *testing.T) {
 	_, r := setupCertificateHandlerRouter(t)
-	
+
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/certificates/templates", nil)
 	req.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(300, model.RoleTeacher, 1, "2023"))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	
+
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Body.String(), `"code":"leave_application_pdf"`)
 }
 
 func TestCertificateAdminRegenerateApplicationPDF(t *testing.T) {
 	_, r := setupCertificateHandlerRouter(t)
-	
+
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/approvals/1/application-pdf/regenerate", nil)
 	req.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(300, model.RoleTeacher, 1, "2023"))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	
+
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Body.String(), `"document_stage":"application"`)
 	require.Contains(t, w.Body.String(), `"document_id":`)
@@ -196,25 +196,25 @@ func TestCertificateAdminRegenerateApplicationPDF(t *testing.T) {
 
 func TestCertificateAdminRevoke(t *testing.T) {
 	_, r := setupCertificateHandlerRouter(t)
-	
+
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/certificates/1/revoke", strings.NewReader(`{"reason":"manual revoke"}`))
 	req.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(300, model.RoleTeacher, 1, "2023"))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	
+
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Body.String(), `"status":"revoked"`)
 }
 
 func TestCertificateAdminRegenerateApprovalCertificate(t *testing.T) {
 	_, r := setupCertificateHandlerRouter(t)
-	
+
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/approvals/1/certificate/regenerate", nil)
 	req.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(300, model.RoleTeacher, 1, "2023"))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	
+
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Body.String(), `"document_stage":"approval_certificate"`)
 	require.Contains(t, w.Body.String(), `"document_id":`)
@@ -222,11 +222,11 @@ func TestCertificateAdminRegenerateApprovalCertificate(t *testing.T) {
 
 func TestCertificateAdminRegenerateApprovalCertificateForbiddenForCadre(t *testing.T) {
 	_, r := setupCertificateHandlerRouter(t)
-	
+
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/approvals/1/certificate/regenerate", nil)
 	req.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(200, model.RoleCadre, 1, "2023"))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	
+
 	require.Equal(t, http.StatusForbidden, w.Code)
 }

@@ -216,10 +216,16 @@ func (s *Service) persistRenderedRecord(ctx context.Context, approval *model.App
 func (s *Service) createDocument(approval *model.Approval, stage string, content []byte, now time.Time) (*model.Document, error) {
 	relPath := filepath.ToSlash(filepath.Join("certificates", fmt.Sprintf("%s_%d_%d.pdf", stage, approval.ID, now.UnixNano())))
 	fullPath := filepath.Join(s.uploadDir, filepath.FromSlash(relPath))
-	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil { return nil, err }
-	if err := os.WriteFile(fullPath, content, 0o644); err != nil { return nil, err }
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(fullPath, content, 0o644); err != nil {
+		return nil, err
+	}
 	doc := &model.Document{Title: fmt.Sprintf("approval_%d_%s.pdf", approval.ID, stage), FilePath: relPath, FileSize: int64(len(content)), ContentType: "application/pdf", UploaderID: approval.ApplicantID}
-	if err := s.documentRepo.Create(doc); err != nil { return nil, err }
+	if err := s.documentRepo.Create(doc); err != nil {
+		return nil, err
+	}
 	return doc, nil
 }
 

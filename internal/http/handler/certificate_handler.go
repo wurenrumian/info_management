@@ -185,7 +185,9 @@ func (h *CertificateHandler) Revoke(c *gin.Context) {
 		response.Error(c, 400, "invalid id")
 		return
 	}
-	var req struct{ Reason string `json:"reason"` }
+	var req struct {
+		Reason string `json:"reason"`
+	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, 400, "invalid body")
 		return
