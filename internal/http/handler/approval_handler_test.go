@@ -19,6 +19,7 @@ func setupApprovalHandlerRouter(t *testing.T) (*gorm.DB, http.Handler) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
+	t.Setenv("DOCUMENT_UPLOAD_DIR", t.TempDir())
 	require.NoError(t, db.AutoMigrate(
 		&model.Class{},
 		&model.User{},
@@ -29,6 +30,9 @@ func setupApprovalHandlerRouter(t *testing.T) (*gorm.DB, http.Handler) {
 		&model.UserSubscribe{},
 		&model.Approval{},
 		&model.ApprovalAction{},
+		&model.Document{},
+		&model.CertificateTemplate{},
+		&model.CertificateRecord{},
 	))
 	require.NoError(t, db.Create(&model.Class{ID: 1, ClassName: "信管1班", Grade: "2023", Major: "信息管理"}).Error)
 	require.NoError(t, db.Create(&model.User{ID: 100, StudentID: "S100", Name: "学生", Role: model.RoleStudent, ClassID: 1, Grade: "2023"}).Error)
@@ -37,6 +41,8 @@ func setupApprovalHandlerRouter(t *testing.T) (*gorm.DB, http.Handler) {
 	require.NoError(t, db.Create(&model.User{ID: 300, StudentID: "T300", Name: "老师", Role: model.RoleTeacher, ClassID: 1, Grade: "2023"}).Error)
 	require.NoError(t, db.Create(&model.User{ID: 301, StudentID: "T301", Name: "外班老师", Role: model.RoleTeacher, ClassID: 2, Grade: "2022"}).Error)
 	require.NoError(t, db.Create(&model.User{ID: 999, StudentID: "A999", Name: "超管", Role: model.RoleSuperAdmin, ClassID: 1, Grade: "2023"}).Error)
+	require.NoError(t, db.Create(&model.CertificateTemplate{ID: 1, Code: "leave_application_pdf", Name: "Leave Application", ApprovalType: model.ApprovalTypeLeave, DocumentStage: model.CertificateDocumentStageApplication, Status: model.CertificateTemplateStatusActive, Renderer: model.CertificateRendererTypst, TemplatePath: "templates/certificates/leave_application.typ", TemplateVersion: "v1"}).Error)
+	require.NoError(t, db.Create(&model.CertificateTemplate{ID: 2, Code: "leave_approval_certificate", Name: "Leave Approval Certificate", ApprovalType: model.ApprovalTypeLeave, DocumentStage: model.CertificateDocumentStageApprovalCertificate, Status: model.CertificateTemplateStatusActive, Renderer: model.CertificateRendererTypst, TemplatePath: "templates/certificates/leave_approval_certificate.typ", TemplateVersion: "v1"}).Error)
 	return db, router.New(db)
 }
 

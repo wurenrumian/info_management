@@ -18,9 +18,12 @@ func setupApprovalService(t *testing.T) (*gorm.DB, *approvals.Service) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Approval{}, &model.ApprovalAction{}))
+	t.Setenv("DOCUMENT_UPLOAD_DIR", t.TempDir())
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Approval{}, &model.ApprovalAction{}, &model.Document{}, &model.CertificateTemplate{}, &model.CertificateRecord{}))
 	require.NoError(t, db.Create(&model.User{ID: 100, StudentID: "S100", Name: "stu", Role: model.RoleStudent, ClassID: 1, Grade: "2023"}).Error)
 	require.NoError(t, db.Create(&model.User{ID: 300, StudentID: "T300", Name: "tea", Role: model.RoleTeacher, ClassID: 1, Grade: "2023"}).Error)
+	require.NoError(t, db.Create(&model.CertificateTemplate{ID: 1, Code: "leave_application_pdf", Name: "Leave Application", ApprovalType: model.ApprovalTypeLeave, DocumentStage: model.CertificateDocumentStageApplication, Status: model.CertificateTemplateStatusActive, Renderer: model.CertificateRendererTypst, TemplatePath: "templates/certificates/leave_application.typ", TemplateVersion: "v1"}).Error)
+	require.NoError(t, db.Create(&model.CertificateTemplate{ID: 2, Code: "leave_approval_certificate", Name: "Leave Approval Certificate", ApprovalType: model.ApprovalTypeLeave, DocumentStage: model.CertificateDocumentStageApprovalCertificate, Status: model.CertificateTemplateStatusActive, Renderer: model.CertificateRendererTypst, TemplatePath: "templates/certificates/leave_approval_certificate.typ", TemplateVersion: "v1"}).Error)
 	return db, approvals.NewService(db)
 }
 
@@ -51,6 +54,11 @@ func TestCreateLeaveAndWithdraw(t *testing.T) {
 	var got model.Approval
 	require.NoError(t, db.First(&got, item.ID).Error)
 	require.Equal(t, model.ApprovalStatusWithdrawn, got.Status)
+	var records []model.CertificateRecord
+	require.NoError(t, db.Where("approval_id = ?", item.ID).Order("id asc").Find(&records).Error)
+	require.Len(t, records, 1)
+	require.Equal(t, model.CertificateDocumentStageApplication, records[0].DocumentStage)
+	require.NotZero(t, records[0].DocumentID)
 }
 
 func TestCreateBudgetWritesSubmitAction(t *testing.T) {
@@ -108,6 +116,40 @@ func TestTeacherReviewApprove(t *testing.T) {
 	require.NoError(t, db.First(&got, item.ID).Error)
 	require.Equal(t, model.ApprovalStatusApproved, got.Status)
 	require.NotNil(t, got.DecidedAt)
+	var records []model.CertificateRecord
+	require.NoError(t, db.Where("approval_id = ?", item.ID).Order("id asc").Find(&records).Error)
+	require.Len(t, records, 2)
+	require.Equal(t, model.CertificateDocumentStageApplication, records[0].DocumentStage)
+	require.Equal(t, model.CertificateDocumentStageApprovalCertificate, records[1].DocumentStage)
+	require.NotZero(t, records[0].DocumentID)
+	require.NotZero(t, records[1].DocumentID)
+}
+
+func TestGetIncludesCertificateRecords(t *testing.T) {
+	db, svc := setupApprovalService(t)
+	actor := auth.Actor{UserID: 100, Role: model.RoleStudent, ClassID: 1, Grade: "2023"}
+	now := time.Now()
+
+	require.NoError(t, db.Create(&model.Approval{
+		ID:           1,
+		ApplicantID:  100,
+		ApprovalType: model.ApprovalTypeLeave,
+		Status:       model.ApprovalStatusApproved,
+		Title:        "请假申请-详情",
+		Semester:     "2026-1",
+		SubmittedAt:  now,
+		DecidedAt:    &now,
+	}).Error)
+	require.NoError(t, db.Create(&model.CertificateRecord{
+		ApprovalID: 1, ApplicantID: 100, TemplateID: 1, DocumentStage: model.CertificateDocumentStageApplication,
+		CertificateNo: "CERT-1", VerificationCode: "VERIFY-1", SealStatus: model.CertificateSealStatusNone,
+		Status: model.CertificateRecordStatusGenerated, GeneratedAt: &now,
+	}).Error)
+
+	detail, err := svc.Get(actor, 1)
+	require.NoError(t, err)
+	require.Len(t, detail.CertificateRecords, 1)
+	require.Equal(t, "CERT-1", detail.CertificateRecords[0].CertificateNo)
 }
 
 func TestReviewedApprovalCannotBeReviewedAgain(t *testing.T) {
