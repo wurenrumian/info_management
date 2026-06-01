@@ -4,8 +4,11 @@
 
 为非开发环境提供公开注册入口，支持学生通过 `student_id + name` 完成账号创建/激活，并直接拿到 JWT，用于后续访问受保护接口。
 
-本方案选择：
-- 纯学号 + 姓名注册
+本方案在保留“学号 + 姓名注册”的基础上，补充密码能力：
+- 默认密码 = 姓名
+- 注册时可显式传 `password`
+- 支持公开账号密码登录
+- 支持 JWT 后修改密码
 - 若学号不存在则自动建号
 - 与微信绑定流程兼容（可选传 `code` 同步绑定 openid）
 
@@ -14,6 +17,8 @@
 ### In Scope
 
 - 新增公开注册接口：`POST /api/v1/auth/public-register`
+- 新增公开登录接口：`POST /api/v1/auth/public-login`
+- 新增密码修改接口：`PATCH /api/v1/me/password`
 - 支持“已存在学号激活”与“不存在学号自动创建”
 - 可选绑定微信 openid（传 `code` 时）
 - 注册成功后直接返回 JWT + 用户信息
@@ -36,6 +41,7 @@
 {
   "student_id": "2020001",
   "name": "张三",
+  "password": "optional_password",
   "code": "wx_auth_code_optional"
 }
 ```
@@ -43,6 +49,7 @@
 字段规则：
 - `student_id`：必填，非空
 - `name`：必填，非空
+- `password`：可选；不传时默认使用 `name` 作为初始密码
 - `code`：可选；有值时尝试 `code -> openid` 并绑定
 
 成功响应（200）：
@@ -108,14 +115,19 @@
 ## 7. 实施改动点
 
 - `internal/http/handler/wechat_handler.go`
-  - 新增 `PublicRegister` handler
+  - 新增 `PublicRegister` / `PublicLogin` handler
+  - 增加 JWT 后修改密码接口
+- `internal/http/handler/me_handler.go`
+  - 新增 `PatchPassword`
 - `internal/http/router/router.go`
   - 注册 `POST /api/v1/auth/public-register`
+  - 注册 `POST /api/v1/auth/public-login`
+  - 注册 `PATCH /api/v1/me/password`
 - `docs/api/phase2-wechat-api.md`
-  - 增补公开注册接口文档
+  - 增补公开注册/登录/改密接口文档
 - 测试：
   - `internal/http/handler/wechat_handler_test.go`
-  - 覆盖：创建新用户、激活已有用户、姓名不匹配、可选 code 绑定
+  - 覆盖：创建新用户、激活已有用户、姓名不匹配、可选 code 绑定、密码登录、改密
 
 ## 8. 测试策略
 
@@ -125,6 +137,9 @@
   - 姓名不匹配返回 401
   - code 无效返回 400
   - openid 冲突返回 409
+  - 默认密码为姓名
+  - 公开登录可用学号+密码登录
+  - JWT 后可修改密码
 - 回归：
   - 不影响现有 `/wechat/login` `/wechat/bind` `/dev/*`
 

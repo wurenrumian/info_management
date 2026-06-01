@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
@@ -16,6 +17,7 @@ import (
 	"manage/internal/http/router"
 	"manage/internal/model"
 	"manage/internal/service/notification"
+	"manage/internal/testutil"
 )
 
 type mockDevSubscribeWechatClient struct{}
@@ -36,7 +38,9 @@ func setupWechatTestRouter(t *testing.T) (*gorm.DB, http.Handler) {
 		Major:     "信息管理",
 	}).Error)
 
-	pwd := "hashed_password"
+	pwdHash, err := bcrypt.GenerateFromPassword([]byte("张三"), bcrypt.DefaultCost)
+	require.NoError(t, err)
+	hashStr := string(pwdHash)
 	require.NoError(t, db.Create(&model.User{
 		ID:           100,
 		StudentID:    "S100",
@@ -44,7 +48,7 @@ func setupWechatTestRouter(t *testing.T) (*gorm.DB, http.Handler) {
 		Role:         model.RoleStudent,
 		ClassID:      1,
 		Grade:        "2023",
-		PasswordHash: &pwd,
+		PasswordHash: &hashStr,
 	}).Error)
 
 	r := router.New(db)
@@ -305,6 +309,8 @@ func TestPublicRegisterCreatesUserWhenMissing(t *testing.T) {
 	require.NoError(t, db.Where("student_id = ?", "S300").First(&user).Error)
 	require.Equal(t, "李四", user.Name)
 	require.Equal(t, model.RoleStudent, user.Role)
+	require.NotNil(t, user.PasswordHash)
+	require.NoError(t, bcrypt.CompareHashAndPassword([]byte(*user.PasswordHash), []byte("李四")))
 	require.NotZero(t, user.ClassID)
 
 	var class model.Class
@@ -339,15 +345,56 @@ func TestPublicRegisterNameMismatch(t *testing.T) {
 	require.Contains(t, w.Body.String(), "student id and name do not match")
 }
 
-func TestPublicRegisterMissingFields(t *testing.T) {
-	_, r := setupWechatTestRouter(t)
+func TestPublicLoginWithDefaultPassword(t *testing.T) {
+	db, r := setupWechatTestRouter(t)
+	pwdHash, err := bcrypt.GenerateFromPassword([]byte("张三"), bcrypt.DefaultCost)
+	require.NoError(t, err)
+	hashStr := string(pwdHash)
+	require.NoError(t, db.Model(&model.User{}).Where("student_id = ?", "S100").Updates(map[string]any{"password_hash": hashStr}).Error)
 
-	body := []byte(`{"student_id":"S100"}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/public-register", bytes.NewReader(body))
+	body := []byte(`{"student_id":"S100","password":"张三"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/public-login", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusBadRequest, w.Code)
-	require.Contains(t, w.Body.String(), "missing student_id or name")
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), `"token"`)
+	require.Contains(t, w.Body.String(), `"student_id":"S100"`)
+	require.Contains(t, w.Body.String(), `"name":"张三"`)
+}
+
+func TestPublicLoginRejectsWrongPassword(t *testing.T) {
+	_, r := setupWechatTestRouter(t)
+
+	body := []byte(`{"student_id":"S100","password":"wrong"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/public-login", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusUnauthorized, w.Code)
+	require.Contains(t, w.Body.String(), "incorrect student id or password")
+}
+
+func TestChangePasswordWithJWT(t *testing.T) {
+	db, r := setupWechatTestRouter(t)
+	pwdHash, err := bcrypt.GenerateFromPassword([]byte("张三"), bcrypt.DefaultCost)
+	require.NoError(t, err)
+	hashStr := string(pwdHash)
+	require.NoError(t, db.Model(&model.User{}).Where("student_id = ?", "S100").Updates(map[string]any{"password_hash": hashStr}).Error)
+
+	body := []byte(`{"current_password":"张三","new_password":"new-pass-123"}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/me/password", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(100, model.RoleStudent, 1, "2023"))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var user model.User
+	require.NoError(t, db.First(&user, 100).Error)
+	require.NotNil(t, user.PasswordHash)
+	require.NoError(t, bcrypt.CompareHashAndPassword([]byte(*user.PasswordHash), []byte("new-pass-123")))
 }

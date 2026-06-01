@@ -77,6 +77,13 @@ type devLoginSubscribeCheckReq struct {
 type publicRegisterReq struct {
 	StudentID string `json:"student_id"`
 	Name      string `json:"name"`
+	Password  string `json:"password"`
+	Code      string `json:"code"`
+}
+
+type publicLoginReq struct {
+	StudentID string `json:"student_id"`
+	Password  string `json:"password"`
 	Code      string `json:"code"`
 }
 
@@ -213,9 +220,13 @@ func (h *WechatHandler) PublicRegister(c *gin.Context) {
 
 	studentID := strings.TrimSpace(req.StudentID)
 	name := strings.TrimSpace(req.Name)
+	password := strings.TrimSpace(req.Password)
 	if studentID == "" || name == "" {
 		response.Error(c, 400, "missing student_id or name")
 		return
+	}
+	if password == "" {
+		password = name
 	}
 
 	user, err := h.userRepo.GetByStudentID(studentID)
@@ -229,11 +240,18 @@ func (h *WechatHandler) PublicRegister(c *gin.Context) {
 			return
 		}
 
+		hash, hashErr := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if hashErr != nil {
+			response.Error(c, 500, "public register failed")
+			return
+		}
+		hashStr := string(hash)
 		user = &model.User{
-			StudentID: studentID,
-			Name:      name,
-			Role:      model.RoleStudent,
-			ClassID:   defaultPublicClassID,
+			StudentID:    studentID,
+			Name:         name,
+			Role:         model.RoleStudent,
+			ClassID:      defaultPublicClassID,
+			PasswordHash: &hashStr,
 		}
 		if err := h.userRepo.Create(user); err != nil {
 			response.Error(c, 500, "public register failed")
@@ -242,6 +260,10 @@ func (h *WechatHandler) PublicRegister(c *gin.Context) {
 	} else {
 		if strings.TrimSpace(user.Name) != name {
 			response.Error(c, 401, "student id and name do not match")
+			return
+		}
+		if err := verifyPasswordAndMaybeBackfill(h.userRepo, user, password); err != nil {
+			response.Error(c, 401, "incorrect student id or password")
 			return
 		}
 	}
@@ -259,6 +281,70 @@ func (h *WechatHandler) PublicRegister(c *gin.Context) {
 			return
 		}
 
+		if err := h.userRepo.UpdateByID(user.ID, map[string]any{"open_id": openID}); err != nil {
+			response.Error(c, 500, "bind failed")
+			return
+		}
+		user.OpenID = &openID
+	}
+
+	effectiveGrade, err := h.gradeSvc.ResolveEffectiveGrade(user)
+	if err != nil {
+		response.Error(c, 500, "resolve effective grade failed")
+		return
+	}
+	token, err := jwtauth.GenerateToken(user.ID, user.Role, user.ClassID, effectiveGrade, h.jwtSecret)
+	if err != nil {
+		response.Error(c, 500, "generate token failed")
+		return
+	}
+	user.Grade = effectiveGrade
+
+	response.OK(c, gin.H{
+		"token": token,
+		"user":  buildUserResponse(user, effectiveGrade),
+	})
+}
+
+func (h *WechatHandler) PublicLogin(c *gin.Context) {
+	var req publicLoginReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, 400, "invalid body")
+		return
+	}
+
+	studentID := strings.TrimSpace(req.StudentID)
+	password := strings.TrimSpace(req.Password)
+	if studentID == "" || password == "" {
+		response.Error(c, 400, "missing student_id or password")
+		return
+	}
+
+	user, err := h.userRepo.GetByStudentID(studentID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Error(c, 401, "incorrect student id or password")
+			return
+		}
+		response.Error(c, 500, "login failed")
+		return
+	}
+	if err := verifyPasswordAndMaybeBackfill(h.userRepo, user, password); err != nil {
+		response.Error(c, 401, "incorrect student id or password")
+		return
+	}
+
+	if code := strings.TrimSpace(req.Code); code != "" {
+		openID, err := h.wechatSvc.CodeToOpenID(code)
+		if err != nil {
+			response.Error(c, 400, "invalid authorization code")
+			return
+		}
+		existing, _ := h.userRepo.GetByOpenID(openID)
+		if existing != nil && existing.ID != user.ID {
+			response.Error(c, 409, "this wechat account is already bound to another user")
+			return
+		}
 		if err := h.userRepo.UpdateByID(user.ID, map[string]any{"open_id": openID}); err != nil {
 			response.Error(c, 500, "bind failed")
 			return

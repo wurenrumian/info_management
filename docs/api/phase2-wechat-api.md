@@ -7,8 +7,10 @@
 ## Authentication
 
 - `/auth/public-register` — 无需认证
+- `/auth/public-login` — 无需认证
 - `/wechat/login` — 无需认证
 - `/wechat/bind` — 可选认证（已登录走 token，未登录走学号+密码）
+- `/me/password` — 需要 JWT
 - `/dev/register-or-login` — 仅 `APP_ENV=dev` 时启用
 - `/dev/login-and-send-subscribe-check` — 仅 `APP_ENV=dev` 时启用
 
@@ -23,6 +25,7 @@
 {
   "student_id": "2020001",
   "name": "张三",
+  "password": "optional_password",
   "code": "wx_auth_code_optional"
 }
 ```
@@ -31,8 +34,11 @@
 1. 按 `student_id` 查用户
 2. 用户存在：校验 `name` 一致，否则拒绝
 3. 用户不存在：自动创建学生账号（role=student），并默认挂到 `未绑定班级`
-4. 若传 `code`：换取 openid 并绑定（冲突则拒绝）
-5. 生成 JWT token 并返回
+4. 密码策略：
+   - 若显式传 `password`，保存该密码的 bcrypt 哈希
+   - 若未传 `password`，默认密码为 `name`，并保存其 bcrypt 哈希
+5. 若传 `code`：换取 openid 并绑定（冲突则拒绝）
+6. 生成 JWT token 并返回
 
 **成功响应**（200）：
 ```json
@@ -68,6 +74,55 @@
 | 401 | `{"error":"student id and name do not match"}` | 同学号姓名不匹配 |
 | 409 | `{"error":"this wechat account is already bound to another user"}` | openid 已被他人绑定 |
 | 500 | `{"error":"public register failed"}` | 创建或查询用户失败 |
+
+---
+
+### POST /api/v1/auth/public-login — 公开账号密码登录
+
+无需认证。
+
+**请求体**：
+```json
+{
+  "student_id": "2020001",
+  "password": "张三"
+}
+```
+
+**逻辑**：
+1. 按 `student_id` 查用户
+2. 校验密码：
+   - 正常情况：校验 `PasswordHash`
+   - 兼容历史用户：若 `PasswordHash` 为空，则首次用姓名作为默认密码进行校验，并自动回填哈希
+3. 成功后签发 JWT token 并返回用户信息
+4. 若同时传 `code`，可在登录时顺带绑定 openid（与公共注册保持一致）
+
+**成功响应**（200）：
+```json
+{
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIs...",
+    "user": {
+      "id": 1,
+      "student_id": "2020001",
+      "name": "张三",
+      "role": 1,
+      "class_id": 10,
+      "grade": "2020",
+      "major": "计算机科学与技术"
+    }
+  }
+}
+```
+
+**错误响应**：
+| 状态码 | 响应体 | 说明 |
+|--------|--------|------|
+| 400 | `{"error":"missing student_id or password"}` | 缺少学号或密码 |
+| 400 | `{"error":"invalid authorization code"}` | 微信 code 无效 |
+| 401 | `{"error":"incorrect student id or password"}` | 密码错误 |
+| 404 | `{"error":"user not found"}` | 学号不存在 |
+| 500 | `{"error":"public login failed"}` | 登录或签发 token 失败 |
 
 ---
 
@@ -165,6 +220,44 @@
 | 401 | `{"error":"please login first or provide student id and password"}` | 既无 token 也无学号密码 |
 | 409 | `{"error":"this wechat account is already bound to another user"}` | openid 已被其他用户绑定 |
 | 500 | `{"error":"bind failed"}` | 数据库错误 |
+
+---
+
+### PATCH /api/v1/me/password — 修改密码
+
+需要 JWT。
+
+**请求体**：
+```json
+{
+  "current_password": "旧密码",
+  "new_password": "新密码"
+}
+```
+
+**逻辑**：
+1. JWT 鉴权后读取当前用户
+2. 校验 `current_password`
+3. 通过后将 `new_password` 写入 bcrypt 哈希
+4. 返回成功标记
+
+**成功响应**（200）：
+```json
+{
+  "data": {
+    "ok": true
+  }
+}
+```
+
+**错误响应**：
+| 状态码 | 响应体 | 说明 |
+|--------|--------|------|
+| 400 | `{"error":"missing current_password or new_password"}` | 参数缺失 |
+| 401 | `{"error":"incorrect current password"}` | 当前密码错误 |
+| 401 | `{"error":"unauthorized"}` | 未携带或校验失败的 JWT |
+| 403 | `{"error":"forbidden"}` | 当前角色无修改密码权限 |
+| 500 | `{"error":"update password failed"}` | 写库失败 |
 
 ---
 
