@@ -70,6 +70,43 @@ func TestApprovalCreateAndListMine(t *testing.T) {
 	require.Contains(t, w2.Body.String(), "五一请假")
 }
 
+func TestApprovalCreateAllowedForCadreTeacherAndSuperAdmin(t *testing.T) {
+	db, r := setupApprovalHandlerRouter(t)
+	body := []byte(`{
+		"approval_type":"leave",
+		"title":"五一请假",
+		"form_data":{"reason":"回家","start_at":"2026-05-01T09:00:00+08:00","end_at":"2026-05-02T18:00:00+08:00","contact_phone":"13800000000"}
+	}`)
+
+	cases := []struct {
+		name    string
+		userID  uint
+		role    int
+		classID uint
+		grade   string
+	}{
+		{name: "cadre", userID: 200, role: model.RoleCadre, classID: 1, grade: "2023"},
+		{name: "teacher", userID: 300, role: model.RoleTeacher, classID: 1, grade: "2023"},
+		{name: "superadmin", userID: 999, role: model.RoleSuperAdmin, classID: 1, grade: "2023"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/approvals", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer "+testutil.GenerateTestToken(tc.userID, tc.role, tc.classID, tc.grade))
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Contains(t, w.Body.String(), `"status":"pending"`)
+		})
+	}
+
+	var count int64
+	require.NoError(t, db.Model(&model.Approval{}).Count(&count).Error)
+	require.Equal(t, int64(3), count)
+}
+
 func TestApprovalGetRejectsOtherStudent(t *testing.T) {
 	db, r := setupApprovalHandlerRouter(t)
 	require.NoError(t, db.Create(&model.Approval{

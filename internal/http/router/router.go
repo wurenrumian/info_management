@@ -28,6 +28,7 @@ func New(db *gorm.DB) *gin.Engine {
 	notifSvc := initNotificationSvc(db)
 	wechatHandler := handler.NewWechatHandler(db, appID, appSecret, jwtSecret, notifSvc)
 	api.POST("/auth/public-register", wechatHandler.PublicRegister)
+	api.POST("/auth/public-login", wechatHandler.PublicLogin)
 	api.POST("/wechat/login", wechatHandler.Login)
 	api.POST("/wechat/bind", middleware.OptionalJWTAuth(jwtSecret), wechatHandler.Bind)
 	api.POST("/dev/register-or-login", wechatHandler.DevRegisterOrLogin)
@@ -54,6 +55,7 @@ func New(db *gorm.DB) *gin.Engine {
 
 	api.GET("/me", meHandler.GetMe)
 	api.PATCH("/me", meHandler.PatchMe)
+	api.PATCH("/me/password", meHandler.PatchPassword)
 	api.GET("/profile/home", meHandler.GetProfileHome)
 	api.GET("/knowledge/search", knowledgeHandler.Search)
 	api.GET("/knowledge/:id", knowledgeHandler.GetByID)

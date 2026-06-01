@@ -9,15 +9,20 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+
 	"manage/internal/auth"
 	"manage/internal/http/response"
+	"manage/internal/model"
+	"manage/internal/repo"
 	"manage/internal/service/authz"
 	"manage/internal/service/profile"
 )
 
 type MeHandler struct {
-	svc *profile.Service
+	svc      *profile.Service
+	userRepo *repo.UserRepo
 }
 
 type updateProfileReq struct {
@@ -29,8 +34,13 @@ type updateProfileReq struct {
 	Bio            *string `json:"bio"`
 }
 
+type changePasswordReq struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
 func NewMeHandler(db *gorm.DB) *MeHandler {
-	return &MeHandler{svc: profile.NewService(db)}
+	return &MeHandler{svc: profile.NewService(db), userRepo: repo.NewUserRepo(db)}
 }
 
 func (h *MeHandler) GetMe(c *gin.Context) {
@@ -78,6 +88,57 @@ func (h *MeHandler) GetProfileHome(c *gin.Context) {
 	}
 
 	response.OK(c, data)
+}
+
+func (h *MeHandler) PatchPassword(c *gin.Context) {
+	actor, ok := auth.GetActor(c)
+	if !ok {
+		response.ErrorWithCode(c, 401, 40100, "unauthorized")
+		return
+	}
+	if !authz.Authorize(actor.Role, authz.ActionMePatch) {
+		response.ErrorWithCode(c, 403, 40300, "forbidden")
+		return
+	}
+
+	var req changePasswordReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorWithCode(c, 400, 40001, "invalid body")
+		return
+	}
+	currentPassword := strings.TrimSpace(req.CurrentPassword)
+	newPassword := strings.TrimSpace(req.NewPassword)
+	if currentPassword == "" || newPassword == "" {
+		response.ErrorWithCode(c, 400, 40001, "missing current_password or new_password")
+		return
+	}
+
+	user, err := h.userRepo.GetByIDInScope(authz.Scope{SelfUserID: actor.UserID}, actor.UserID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Error(c, 404, "user not found")
+			return
+		}
+		response.ErrorWithCode(c, 500, 50000, "query me failed")
+		return
+	}
+
+	if err := verifyPasswordAndMaybeBackfill(h.userRepo, user, currentPassword); err != nil {
+		response.ErrorWithCode(c, 401, 40101, "incorrect current password")
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		response.ErrorWithCode(c, 500, 50000, "update password failed")
+		return
+	}
+	if err := h.userRepo.UpdatePasswordHash(user.ID, string(hash)); err != nil {
+		response.ErrorWithCode(c, 500, 50000, "update password failed")
+		return
+	}
+
+	response.OK(c, gin.H{"ok": true})
 }
 
 func (h *MeHandler) PatchMe(c *gin.Context) {
@@ -193,6 +254,25 @@ func (h *MeHandler) PatchMe(c *gin.Context) {
 	}
 
 	response.OK(c, out)
+}
+
+func verifyPasswordAndMaybeBackfill(userRepo *repo.UserRepo, user *model.User, plain string) error {
+	if user.PasswordHash == nil || strings.TrimSpace(*user.PasswordHash) == "" {
+		if plain != strings.TrimSpace(user.Name) {
+			return errors.New("incorrect password")
+		}
+		hash, err := bcrypt.GenerateFromPassword([]byte(plain), bcrypt.DefaultCost)
+		if err != nil {
+			return err
+		}
+		hashStr := string(hash)
+		if err := userRepo.UpdatePasswordHash(user.ID, hashStr); err != nil {
+			return err
+		}
+		user.PasswordHash = &hashStr
+		return nil
+	}
+	return bcrypt.CompareHashAndPassword([]byte(*user.PasswordHash), []byte(plain))
 }
 
 func utf8Len(s string) int {

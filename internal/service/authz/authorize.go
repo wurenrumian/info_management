@@ -55,6 +55,7 @@ func Authorize(role int, action string) bool {
 			action == ActionAnnouncementsPatch ||
 			action == ActionAnnouncementsPublish ||
 			action == ActionAnnouncementsArchive ||
+			action == ActionApprovalsCreate ||
 			action == ActionApprovalsList ||
 			action == ActionApprovalsGet ||
 			action == ActionApprovalsRemind ||
@@ -98,6 +99,7 @@ func Authorize(role int, action string) bool {
 			action == ActionAnnouncementsPatch ||
 			action == ActionAnnouncementsPublish ||
 			action == ActionAnnouncementsArchive ||
+			action == ActionApprovalsCreate ||
 			action == ActionApprovalsList ||
 			action == ActionApprovalsGet ||
 			action == ActionApprovalsReview ||
